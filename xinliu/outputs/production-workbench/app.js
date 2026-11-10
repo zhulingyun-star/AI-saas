@@ -32,9 +32,12 @@ const escapeText = value => String(value ?? '').replace(/[&<>"']/g, character =>
 const uniqueId = prefix => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 const button = (label, action, style = '', attributes = '') => `<button class="btn ${style}" data-action="${action}" ${attributes}>${label}</button>`;
 const badge = (label, style = '') => `<span class="badge ${style}">${escapeText(label)}</span>`;
-const headline = (title, subtitle, controls = '') => `<div class="page-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="row wrap gap8">${controls}</div></div>`;
+const headline = (title, subtitle, controls = '') => {
+  const contextOnly = ['今日制作', '样片广场', '资源中心', '客户知识', '项目总览', '我的待办', '生成任务', '团队与生产管理', '批量排产', '参考片拆解', '素材投放数据', '接口与费用', '客户交付查看', '短漫剧制作'];
+  return `<div class="page-head"><div><h1>${title}</h1>${subtitle && !contextOnly.includes(title) ? `<p>${subtitle}</p>` : ''}</div><div class="row wrap gap8">${controls}</div></div>`;
+};
 const emptyState = (title, description, controls = '') => `<div class="card empty">${icon('folder')}<h2>${title}</h2><p>${description}</p><div class="row wrap gap8">${controls}</div></div>`;
-const titleMarkup = () => `<a href="#home" class="brandmark">${icon('film')}<span>心流<small>电商内容生产</small></span></a>`;
+const titleMarkup = () => `<a href="#home" class="brandmark">${icon('film')}<span>心流</span></a>`;
 
 const categories = {
   '服饰鞋包': { formats: ['真人口播', '上身试穿', '场景穿搭', '细节演示', '多款混剪', '直播切片', '参考片改编', '剧情种草', '商品转台'], claims: ['版型', '上身效果', '面料细节', '搭配场景', '尺码与体型'], evidence: ['正侧背展示', '面料近景', '活动动作', '真实试穿素材'], style: '上身试穿', model: 'lin', product: 'coat' },
@@ -193,7 +196,7 @@ function statsMarkup(items) {
   return `<div class="stats">${items.map(item => `<div class="stat"><span>${item[0]}</span><strong>${item[1]}</strong><p>${item[2]}</p></div>`).join('')}</div>`;
 }
 function loginPage() {
-  return `<div class="login-page"><section class="login-story">${titleMarkup()}<div><h1>口播、试穿、混剪。<br>把一天的素材，排清楚。</h1><p>商品、模特、穿搭和镜头配置能复用。批量先排产，生成按需确认。</p><div class="story-preview"><img src="media/fashion.jpg" alt="穿搭示例素材"><strong>通勤这样穿<br>先看上身效果</strong><span>一条素材 / 拍法与后期可选</span></div></div><span class="small-print">示例人像仅用于界面；本地视频预览不是模型生成结果</span></section><section class="login-content"><form id="loginForm"><span class="meta">电商内容生产</span><h1 class="mt">进入工作空间</h1><p class="meta mt">当前支持本地体验；不发送登录信息</p><label class="field mt"><span>工作邮箱</span><input class="input" name="email" type="email" required placeholder="name@company.com"></label><label class="field"><span>演示密码</span><input class="input" type="password" name="password" minlength="6" required placeholder="不用填写真实密码"></label><button class="btn primary full" type="submit">登录工作台</button><div class="divider"></div>${button('直接体验', 'enter', 'full')}<p class="small-print mt">上传素材仅保存在浏览器，刷新后继续使用</p></form></section></div>`;
+  return `<div class="login-page ui-login"><section class="login-story">${titleMarkup()}<div class="ui-login-preview"><div class="story-preview"><img src="media/fashion.jpg" alt="服饰穿搭界面示例，非模型生成"><span>穿搭素材 · 示例</span></div></div><span class="small-print">示例人像仅用于界面；非模型生成</span></section><section class="login-content"><form id="loginForm"><h1>进入工作空间</h1><div class="ui-login-status">本地体验 · 不发送登录信息</div><label class="field mt"><span>工作邮箱</span><input class="input" name="email" type="email" required placeholder="name@company.com"></label><label class="field"><span>演示密码</span><input class="input" type="password" name="password" minlength="6" required placeholder="不用填写真实密码"></label><button class="btn primary full" type="submit">登录工作台</button><div class="divider"></div>${button('直接体验', 'enter', 'full')}<details class="ui-context-disclosure mt"><summary>本地资料保存范围</summary><div class="ui-context-body">页面资料与媒体保存在当前浏览器，后端任务另行保存；不支持生产多人登录。</div></details></form></section></div>`;
 }
 function homePage() {
   const current = client();
@@ -432,6 +435,7 @@ function render() {
   collabAfterRender();
   if (allowed && collabActor().role !== 'guest') referenceAfterRender();
   if (allowed && collabActor().role !== 'guest') generationAfterRender();
+  if (view !== 'login') uiLayoutAfterRender();
 }
 function navigate(view) { closeModal(); if(location.hash==='#'+view)render();else location.hash=view; }
 function openModal(title,body,large=false) {

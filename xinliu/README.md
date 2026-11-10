@@ -2,6 +2,8 @@
 
 品牌与 DP 电商内容组的视频制作工作台：交付项目、当前待办、生成任务三层关联。
 
+新开发对话先读：[产品全景与开发交接](./outputs/心流_产品全景与开发交接_20261111.md) 和 `AGENTS.md`。2026-11-11 UI版减少口号与重复说明，用布局、状态和主操作组织页面，保留事实与费用授权。
+
 ## 启动
 
 需要 Node.js 22+，建议 Node.js 24。
@@ -36,6 +38,7 @@ node work/build-production.cjs
 node --test backend/test/server.test.cjs
 npm ci --prefix work/ui-runtime
 node work/verify-generation-ui.cjs
+node work/verify-ui-layout.cjs
 ```
 
 浏览器验证目前默认使用 Windows Microsoft Edge。其他验证要求预览服务已启动：

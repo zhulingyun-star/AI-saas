@@ -66,9 +66,9 @@ function flowHome() {
   const drafts = current.projects.filter(project => project.status !== '已归档').slice(0, 3);
   const preferred = flowRecipes().filter(recipe => recipe.kind !== '漫剧').sort((left, right) => Number(!right.demo) - Number(!left.demo) || Number(current.favorites.includes(right.id)) - Number(current.favorites.includes(left.id)));
   return `${headline('今日制作', escapeText(current.name), button('直接做视频 ' + icon('plus'), 'guard-direct', 'primary') + button('从样片开始', 'flow-gallery'))}${flowNav()}${guardHomeSwitch()}
-    <section class="flow-start"><div><h2>选商品，沿用常用拍法</h2><p>有想法直接制作，需要参考再选样片</p></div><div class="row wrap gap8">${button('参考片改编', 'flow-reference')}${button('导入已有脚本', 'flow-import')}${button('做一条漫剧', 'flow-drama-start')}</div></section>
+    <section class="flow-start"><div class="flow-start-actions">${button(icon('film') + ' 参考片改编', 'flow-reference')}${button(icon('file') + ' 导入已有脚本', 'flow-import')}${button(icon('people') + ' 做一条漫剧', 'flow-drama-start')}</div></section>
     <section class="flow-section"><div class="flow-section-head"><h3>继续制作</h3><button class="link" data-action="nav" data-view="queue">全部任务 ${current.jobs.length}</button></div>${drafts.length ? `<div class="flow-resume-list">${drafts.map(project => `<button class="flow-resume" data-action="flow-resume" data-id="${project.id}"><span class="flow-resume-icon">${icon(project.drama ? 'people' : 'film')}</span><span class="grow"><strong>${escapeText(project.name)}</strong><small>${escapeText(project.drama ? '漫剧' : project.sku)} · ${project.planChanged ? '方案已变更，待重新确认' : project.result ? '待对照检查' : project.accepted ? '方案已确认' : '待确认方案'}</small></span>${icon('arrow')}</button>`).join('')}</div>` : `<div class="flow-empty-inline">没有未完成任务，选一个样片开始即可${button('载入示例客户', 'load-demo', 'ghost sm')}</div>`}</section>
-    <section class="flow-section"><div class="flow-section-head"><h3>${current.recipes.length ? '客户配方与常用拍法' : '先试这些拍法'}</h3><button class="link" data-action="flow-gallery">查看全部</button></div>${flowRecipeCards(preferred.slice(0, 4))}</section>`;
+    <section class="flow-section"><div class="flow-section-head"><h3>${current.recipes.length ? '客户常用' : '常用拍法'}</h3><button class="link" data-action="flow-gallery">查看全部</button></div>${flowRecipeCards(preferred.slice(0, 4))}</section>`;
 }
 function flowGallery() {
   const current = flowCurrent();
@@ -187,7 +187,7 @@ function flowRestructureShots(project, count, duration) {
   project.shots = Array.from({ length: count }, (_, index) => ({ ...(oldShots[index] || additional[index] || additional.at(-1)), id: oldShots[index]?.id || uniqueId('shot'), start: index * duration / count, end: (index + 1) * duration / count }));
 }
 function flowStepbar(step) {
-  return `<div class="flow-stepbar"><button data-action="flow-gallery">${icon('back')} 换个样片</button><div>${['换商品 / 设角色', '确认方案', '制作与检查'].map((label, index) => `<span class="${step === index ? 'active' : ''}">${index + 1} ${label}</span>`).join('')}</div><span>默认 1 条</span></div>`;
+  return `<div class="flow-stepbar"><button data-action="flow-gallery">${icon('back')} 样片</button><div>${['商品 / 角色', '方案确认', '出片 / 审片'].map((label, index) => `<span class="${step === index ? 'active' : ''}" ${step === index ? 'aria-current="step"' : ''}>${index + 1} ${label}</span>`).join('')}</div><span>1 条</span></div>`;
 }
 function flowQuick() {
   const project = flowProject();

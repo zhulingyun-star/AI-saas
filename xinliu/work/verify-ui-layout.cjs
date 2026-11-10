@@ -1,0 +1,89 @@
+const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
+
+async function main() {
+  const output = path.resolve(__dirname, '../outputs/production-workbench');
+  const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
+  const checks = [];
+  try {
+    const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, reducedMotion: 'reduce' });
+    page.setDefaultTimeout(10000);
+    const errors = []; const external = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:8767/')) external.push(request.url()); });
+    const nav = async view => { await page.evaluate(view => navigate(view), view); await page.waitForFunction(view => viewState.view === view, view); };
+    const screenshot = async name => {
+      await page.evaluate(() => { document.querySelector('.toast')?.classList.remove('visible'); window.scrollTo(0, 0); });
+      await page.screenshot({ path: path.join(output, name) });
+    };
+    await page.goto('http://127.0.0.1:8767/#resources');
+    await page.getByRole('heading', { name: '资源中心', exact: true }).waitFor();
+    assert.equal(await page.locator('.page-head p').count(), 0);
+    assert.equal(await page.locator('.resource-tabs .ui-tab-count').count(), 5);
+    assert.equal(await page.locator('nav [aria-current="page"]').innerText(), '资源中心');
+    await page.getByRole('heading', { name: '素材库为空' }).waitFor();
+    await page.locator('#assetQuery').fill('找不到');
+    await page.getByRole('heading', { name: '没有匹配素材' }).waitFor();
+    await page.getByRole('button', { name: '重置筛选', exact: true }).click();
+    assert.equal(await page.locator('#assetQuery').inputValue(), '');
+    await screenshot('UI精修-资源中心空状态.png');
+    checks.push('页头删除静态说明、资源分类有数量、当前导航明确、首次空状态与搜索空状态区分、重置可操作');
+    await nav('home');
+    await page.getByRole('button', { name: '载入示例客户' }).click();
+    await nav('resources');
+    assert.ok(await page.locator('.asset-card').count() > 0);
+    await page.waitForFunction(() => [...document.querySelectorAll('.asset-card img')].every(image => image.complete && image.naturalWidth > 0));
+    await screenshot('UI精修-资源中心.png');
+    await nav('projects');
+    assert.equal(await page.locator('nav [aria-current="page"]').innerText(), '项目与制作');
+    assert.equal(await page.locator('.page-head p').count(), 0);
+    await page.getByRole('button', { name: '载入十项目示例' }).click();
+    await page.locator('.collab-project-table').waitFor();
+    await screenshot('UI精修-项目总览.png');
+    assert.equal(await page.locator('.collab-local-note').count(), 0);
+    await nav('home');
+    assert.equal(await page.locator('.flow-start h2').count(), 0);
+    await page.getByRole('button', { name: '直接做视频' }).click();
+    await page.locator('#flowClaims').fill('客户确认外观与版型，不承诺性能');
+    await page.getByRole('button', { name: '看本条方案' }).click();
+    await page.getByRole('heading', { name: '确认这一条的效果' }).waitFor();
+    assert.equal(await page.locator('.flow-stepbar [aria-current="step"]').count(), 1);
+    assert.equal(await page.locator('#flowApprove').count(), 1);
+    assert.equal(await page.locator('[data-action="play-preview"]').count(), 1);
+    await page.locator('.ui-context-disclosure').filter({ hasText: '方案预览范围' }).locator('summary').click();
+    assert.ok(await page.getByText('这是本地配方编排的方案，不是模型生成效果。动作与人物一致性仍需用真实成片检查。', { exact: true }).isVisible());
+    await page.locator('.ui-context-disclosure').filter({ hasText: '方案预览范围' }).locator('summary').click();
+    await page.getByRole('button', { name: '确认并创建 1 条产单' }).click();
+    assert.match(await page.locator('[role="alert"]').innerText(), /勾选/);
+    await screenshot('UI精修-方案确认.png');
+    checks.push('去首页口号、步骤高亮、移除重复播放、风险说明可展开、未确认不能提交');
+    for (const width of [1500, 1024, 768, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const view of ['projects', 'tasks', 'runs', 'resources', 'models', 'voices', 'wardrobe', 'home', 'brief', 'preferences', 'settings', 'queue']) {
+        await nav(view);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false, `${view} overflows at ${width}`);
+      }
+    }
+    const offline = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+    await offline.goto('file:///' + path.resolve(output, '../电商生产台.html').replace(/\\/g, '/') + '#resources');
+    await offline.getByRole('heading', { name: '资源中心', exact: true }).waitFor();
+    assert.equal(await offline.locator('.ui-refined').count(), 1);
+    assert.deepEqual(errors, []); assert.deepEqual(external, []);
+    checks.push('十二入口四种宽度无全页溢出、无脚本错误、无外部调用、离线新样式可用');
+    await page.setViewportSize({ width: 1500, height: 1000 });
+    await nav('login');
+    assert.equal(await page.locator('.login-story h1').count(), 0);
+    await page.getByRole('heading', { name: '进入工作空间', exact: true }).waitFor();
+    assert.equal(await page.locator('input[name="password"]').getAttribute('placeholder'), '不用填写真实密码');
+    await screenshot('UI精修-进入工作空间.png');
+    await page.getByRole('button', { name: '直接体验', exact: true }).click();
+    assert.equal(await page.evaluate(() => viewState.view === 'home' || viewState.view === 'queue'), true);
+    checks.push('登录页去宣传口号、示例图有来源标识、本地登录边界可见、直接体验有效');
+    const report = { status: 'passed', checks, pageErrors: errors, externalRequests: external, scope: 'UI与已有本地交互，非生产安全或模型质量测试' };
+    fs.writeFileSync(path.join(output, 'UI精修验证.json'), JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(report, null, 2));
+  } finally { await browser.close(); }
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

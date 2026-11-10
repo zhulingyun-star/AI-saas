@@ -32,7 +32,7 @@ async function main() {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin + '/#home');
     assert.match(await page.title(), /心流/);
-    assert.equal(await page.locator('.brandmark span').first().innerText(), '心流\n电商内容生产');
+    assert.equal(await page.locator('.brandmark span').first().innerText(), '心流');
     await page.getByRole('button', { name: '直接做视频' }).click();
     await page.locator('#flowClaims').fill('客户确认：领口与外观，未确认性能不承诺');
     await page.getByRole('button', { name: '看本条方案' }).click();

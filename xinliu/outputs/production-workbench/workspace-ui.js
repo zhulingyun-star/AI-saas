@@ -17,7 +17,7 @@ const workspaceUi = {
 
 function workspaceShell(view, body) {
   const resourceViews = ['resources', 'assets', 'models', 'wardrobe', 'voices', 'reference'];
-  const active = resourceViews.includes(view) ? 'resources' : ['home', 'projects', 'tasks', 'runs', 'project', 'deliveries', 'gallery', 'queue', 'review', 'batch'].includes(view) ? 'home' : ['quick', 'brief', 'result', 'drama'].includes(view) ? 'studio' : view;
+  const active = resourceViews.includes(view) ? 'resources' : ['home', 'projects', 'tasks', 'runs', 'project', 'deliveries', 'gallery', 'queue', 'review', 'batch'].includes(view) ? 'projects' : ['quick', 'brief', 'result', 'drama'].includes(view) ? 'studio' : view;
   const links = [
     ['projects', 'home', '项目与制作'],
     ['studio', 'film', '内容制作'],
@@ -27,12 +27,12 @@ function workspaceShell(view, body) {
     ['settings', 'settings', '团队与费用']
   ];
   return `<aside class="sidebar workspace-sidebar">${titleMarkup()}
-    <div class="workspace"><span class="meta">工作空间</span><br><strong>曜石电商 · 内容组</strong></div>
+    <div class="workspace"><strong>曜石电商 · 内容组</strong></div>
     <nav aria-label="主导航">${links.map(link => `<button class="navbutton ${active === link[0] ? 'active' : ''}" data-action="nav" data-view="${link[0]}" title="${link[2]}" ${active === link[0] ? 'aria-current="page"' : ''}>${icon(link[1])}<span>${link[2]}</span></button>`).join('')}</nav>
     <div class="side-foot"><div class="row"><span class="avatar">林</span><div class="user-copy grow"><h4>林川</h4><span class="meta">内容负责人</span></div>${button(icon('arrow'), 'logout', 'ghost', 'aria-label="退出"')}</div></div>
   </aside><div class="shell ${state.dense ? 'dense' : ''}">
     <header class="topbar"><div class="row gap8"><span class="small">客户</span><select id="activeClient" class="input" aria-label="当前客户">${Object.entries(state.clients).map(([id, item]) => `<option value="${id}" ${id === state.activeClient ? 'selected' : ''}>${escapeText(item.name)}</option>`).join('')}</select></div>
-    <div class="row gap8"><button class="prototype-indicator" data-action="capability-report">原型模式 ${icon('book')}</button></div></header>
+    <div class="row gap8"><button class="prototype-indicator" data-action="capability-report" aria-label="本地测试能力与限制">本地测试 ${icon('book')}</button></div></header>
     <main class="page workspace-page">${body}</main></div>`;
 }
 
@@ -96,9 +96,9 @@ function workspaceResources() {
   const controls = originalHeadline?.lastElementChild?.innerHTML || '';
   originalHeadline?.remove();
   container.querySelectorAll(':scope > .notice').forEach(element => element.remove());
-  return `${headline('资源中心', '当前客户的素材与拍摄资源，跨项目复用', controls)}
+  return `${headline('资源中心', '', controls)}
     ${workspaceUi.resourceReturn ? `<div class="resource-return"><span class="grow">正在为「${escapeText(product().name)}」准备资源</span>${button('返回当前制作', 'workspace-return-studio', 'sm')}</div>` : ''}
-    <div class="tabs resource-tabs" role="tablist" aria-label="资源分类">${tabs.map(tab => `<button class="${workspaceUi.resourceTab === tab[0] ? 'active' : ''}" data-action="workspace-resource-tab" data-tab="${tab[0]}" role="tab" aria-selected="${workspaceUi.resourceTab === tab[0]}">${tab[1]}</button>`).join('')}</div>${container.innerHTML}`;
+    <div class="tabs resource-tabs" role="tablist" aria-label="资源分类">${tabs.map(tab => `<button class="${workspaceUi.resourceTab === tab[0] ? 'active' : ''}" data-action="workspace-resource-tab" data-tab="${tab[0]}" role="tab" aria-selected="${workspaceUi.resourceTab === tab[0]}">${tab[1]}</button>`).join('')}</div><div class="resource-content">${container.innerHTML}</div>`;
 }
 
 function workspaceStudio() {

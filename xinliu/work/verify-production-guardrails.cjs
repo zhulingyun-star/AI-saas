@@ -22,6 +22,7 @@ async function main() {
     await page.goto('http://127.0.0.1:8767/#home');
     await page.getByRole('heading', { name: '今日制作', exact: true }).waitFor();
     await shot('依据改版-首页.png');
+    await page.locator('.ui-view-preference>summary').click();
     await page.getByRole('button', { name: '队列优先', exact: true }).click();
     await page.reload();
     assert.equal(await page.evaluate(() => state.startView), '队列优先');

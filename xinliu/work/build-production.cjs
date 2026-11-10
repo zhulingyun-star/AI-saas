@@ -17,6 +17,8 @@ const referenceCss = fs.readFileSync(path.join(root, 'reference-workflow.css'), 
 let generationUi = fs.readFileSync(path.join(root, 'generation-ui.js'), 'utf8');
 const strategies = fs.readFileSync(path.join(root, 'prompt-strategies.js'), 'utf8');
 const generationCss = fs.readFileSync(path.join(root, 'generation-ui.css'), 'utf8');
+const uiLayout = fs.readFileSync(path.join(root, 'ui-layout.js'), 'utf8');
+const uiCss = fs.readFileSync(path.join(root, 'ui-layout.css'), 'utf8');
 let embeddedFlow=productionFlow;
 for (const name of fs.readdirSync(path.join(root, 'media'))) {
   if (!/\.(jpg|svg)$/.test(name)) continue;
@@ -31,8 +33,10 @@ html = html.replace('<link rel="stylesheet" href="production-guardrails.css">', 
 html = html.replace('<link rel="stylesheet" href="collaboration.css">', '<style>' + collaborationCss + '</style>');
 html = html.replace('<link rel="stylesheet" href="reference-workflow.css">', '<style>' + referenceCss + '</style>');
 html = html.replace('<link rel="stylesheet" href="generation-ui.css">', '<style>' + generationCss + '</style>');
+html = html.replace('<link rel="stylesheet" href="ui-layout.css">', '<style>' + uiCss + '</style>');
 html = html.replace('<script src="workspace-ui.js"></script>', '<script>' + workspaceUi.replace(/<\/script/gi, '<\\/script') + '</script>');
 html = html.replace('<script src="collaboration.js"></script>', '<script>' + collaboration.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="ui-layout.js"></script>', '<script>' + uiLayout.replace(/<\/script/gi, '<\\/script') + '</script>');
 html = html.replace('<script src="reference-workflow.js"></script>', '<script>' + referenceWorkflow.replace(/<\/script/gi, '<\\/script') + '</script>');
 html = html.replace('<script src="production-guardrails.js"></script>', '<script>' + guardrails.replace(/<\/script/gi, '<\\/script') + '</script>');
 html = html.replace('<script src="production-flow.js"></script>', '<script>' + embeddedFlow.replace(/<\/script/gi, '<\\/script') + '</script>');
