@@ -1,0 +1,41 @@
+{
+  "description": "This is Xinliu's bridge contract, NOT a claimed Seedance official endpoint. Configure your authorized supplier from its documentation.",
+  "providers": {
+    "video": {
+      "protocol": "xinliu-bridge",
+      "baseUrl": "https://YOUR-AUTHORIZED-SUPPLIER.example",
+      "keyEnv": "XINLIU_VIDEO_KEY",
+      "model": "REPLACE_WITH_REAL_MODEL_ID",
+      "createPath": "/YOUR-CREATE-TASK-PATH",
+      "statusPath": "/YOUR-STATUS-TASK-PATH/{id}",
+      "idempotencyHeader": "",
+      "capabilities": ["commerce", "reference", "scene", "dialogue", "drama"],
+      "supportedAspects": ["9:16", "16:9", "1:1"],
+      "supportedResolutions": ["720p", "1080p"],
+      "maxDuration": 30,
+      "supportsImageDataUri": false,
+      "supportsAudioReference": false,
+      "supportsGarmentReference": false,
+      "allowedResultOrigins": ["https://YOUR-RESULT-STORAGE.example"],
+      "price": { "creditsPerSecond": null, "source": "operator-configured estimate; not actual settlement" },
+      "response": { "idPath": "id", "statusPath": "status", "resultPath": "output.video_url", "success": ["succeeded"], "failed": ["failed"], "running": ["queued", "running", "processing"] }
+    },
+    "vision": {
+      "protocol": "openai-chat",
+      "baseUrl": "https://YOUR-VISION-SUPPLIER.example",
+      "createPath": "/v1/chat/completions",
+      "keyEnv": "XINLIU_VISION_KEY",
+      "model": "REPLACE_WITH_REAL_VISION_MODEL_ID",
+      "supportsImageDataUri": true,
+      "price": { "fixedCredits": null }
+    },
+    "text": {
+      "protocol": "openai-chat",
+      "baseUrl": "https://YOUR-TEXT-SUPPLIER.example",
+      "createPath": "/v1/chat/completions",
+      "keyEnv": "XINLIU_TEXT_KEY",
+      "model": "REPLACE_WITH_REAL_TEXT_MODEL_ID",
+      "price": { "fixedCredits": null }
+    }
+  }
+}

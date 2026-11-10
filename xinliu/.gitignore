@@ -1,0 +1,13 @@
+**/node_modules/
+.env
+.env.*
+!.env.example
+backend/data/
+backend/provider.local.json
+*.log
+*.tmp
+outputs/production-workbench/*.png
+outputs/production-workbench/*.json
+outputs/production-workbench/*.zip
+outputs/production-workbench/*.webm
+!outputs/production-workbench/服饰细节_本地粗剪_非AI生成.webm

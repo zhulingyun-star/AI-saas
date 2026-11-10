@@ -1,0 +1,43 @@
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '../outputs/production-workbench');
+let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
+let javascript = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+const workspaceUi = fs.readFileSync(path.join(root, 'workspace-ui.js'), 'utf8');
+const productionFlow = fs.readFileSync(path.join(root, 'production-flow.js'), 'utf8');
+const productionCss = fs.readFileSync(path.join(root, 'production-flow.css'), 'utf8');
+const guardrails = fs.readFileSync(path.join(root, 'production-guardrails.js'), 'utf8');
+const guardrailsCss = fs.readFileSync(path.join(root, 'production-guardrails.css'), 'utf8');
+const collaboration = fs.readFileSync(path.join(root, 'collaboration.js'), 'utf8');
+const collaborationCss = fs.readFileSync(path.join(root, 'collaboration.css'), 'utf8');
+const referenceWorkflow = fs.readFileSync(path.join(root, 'reference-workflow.js'), 'utf8');
+const referenceCss = fs.readFileSync(path.join(root, 'reference-workflow.css'), 'utf8');
+let generationUi = fs.readFileSync(path.join(root, 'generation-ui.js'), 'utf8');
+const strategies = fs.readFileSync(path.join(root, 'prompt-strategies.js'), 'utf8');
+const generationCss = fs.readFileSync(path.join(root, 'generation-ui.css'), 'utf8');
+let embeddedFlow=productionFlow;
+for (const name of fs.readdirSync(path.join(root, 'media'))) {
+  if (!/\.(jpg|svg)$/.test(name)) continue;
+  const uri = 'data:'+(name.endsWith('.svg')?'image/svg+xml':'image/jpeg')+';base64,' + fs.readFileSync(path.join(root, 'media', name)).toString('base64');
+  javascript = javascript.split('media/' + name).join(uri);
+  embeddedFlow=embeddedFlow.split('media/'+name).join(uri);
+  generationUi=generationUi.split('media/'+name).join(uri);
+}
+html = html.replace('<link rel="stylesheet" href="styles.css">', '<style>' + css + '</style>');
+html = html.replace('<link rel="stylesheet" href="production-flow.css">', '<style>' + productionCss + '</style>');
+html = html.replace('<link rel="stylesheet" href="production-guardrails.css">', '<style>' + guardrailsCss + '</style>');
+html = html.replace('<link rel="stylesheet" href="collaboration.css">', '<style>' + collaborationCss + '</style>');
+html = html.replace('<link rel="stylesheet" href="reference-workflow.css">', '<style>' + referenceCss + '</style>');
+html = html.replace('<link rel="stylesheet" href="generation-ui.css">', '<style>' + generationCss + '</style>');
+html = html.replace('<script src="workspace-ui.js"></script>', '<script>' + workspaceUi.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="collaboration.js"></script>', '<script>' + collaboration.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="reference-workflow.js"></script>', '<script>' + referenceWorkflow.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="production-guardrails.js"></script>', '<script>' + guardrails.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="production-flow.js"></script>', '<script>' + embeddedFlow.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="prompt-strategies.js"></script>', '<script>' + strategies.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="generation-ui.js"></script>', '<script>' + generationUi.replace(/<\/script/gi, '<\\/script') + '</script>');
+html = html.replace('<script src="app.js"></script>', '<script>' + javascript.replace(/<\/script/gi, '<\\/script') + '</script>');
+fs.writeFileSync(path.resolve(__dirname, '../outputs/电商生产台.html'), html);
+console.log('Built self-contained workbench: ' + Buffer.byteLength(html) + ' bytes');

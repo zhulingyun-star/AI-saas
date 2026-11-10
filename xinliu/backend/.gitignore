@@ -1,0 +1,4 @@
+data/
+.env.local
+provider.local.json
+*.log

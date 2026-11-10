@@ -1,0 +1,121 @@
+const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
+
+function referenceVideoFixture(root) {
+  const bytes = fs.readFileSync(path.join(root, '服饰细节_本地粗剪_非AI生成.webm'));
+  const info = bytes.indexOf(Buffer.from('1549a966', 'hex'));
+  assert.ok(info > 0);
+  const sizeIndex = info + 4;
+  assert.equal(bytes[sizeIndex] & 0x80, 0x80);
+  const infoSize = bytes[sizeIndex] & 0x7f;
+  assert.ok(infoSize + 11 < 127);
+  const duration = Buffer.from('4489880000000000000000', 'hex');
+  duration.writeDoubleBE(10000, 3);
+  const prefix = Buffer.from(bytes.subarray(0, sizeIndex + 1));
+  prefix[sizeIndex] = 0x80 | infoSize + 11;
+  return Buffer.concat([prefix, bytes.subarray(sizeIndex + 1, sizeIndex + 1 + infoSize), duration, bytes.subarray(sizeIndex + 1 + infoSize)]);
+}
+async function main() {
+  const root = path.resolve(__dirname, '../outputs/production-workbench');
+  const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--disable-gpu'] });
+  const checks = [];
+  try {
+    const page = await browser.newPage({ viewport: { width: 1500, height: 1080 }, reducedMotion: 'reduce', acceptDownloads: true });
+    page.setDefaultTimeout(12000);
+    const errors = []; const external = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:8767/')) external.push(request.url()); });
+    const nav = async view => { await page.evaluate(view => navigate(view), view); await page.waitForFunction(view => viewState.view === view, view); };
+    await page.goto('http://127.0.0.1:8767/#home');
+    await page.getByRole('button', { name: '直接做视频' }).click();
+    await page.locator('#flowClaims').fill('当前客户确认：展示外套外观，不承诺性能');
+    await page.getByRole('button', { name: '看本条方案' }).click();
+    await page.getByRole('heading', { name: '确认这一条的效果' }).waitFor();
+    const original = await page.evaluate(() => ({ workId: state.config.draftId, shots: collabCopy(getShots()), claims: state.config.claims }));
+    await nav('reference');
+    await page.locator('#referenceVideoUpload').setInputFiles({ name: '参考片-本地10秒测试.webm', mimeType: 'video/webm', buffer: referenceVideoFixture(root) });
+    await page.waitForFunction(() => client().reference?.shots.every(shot => shot.frameId), { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelectorAll('.reference-frames img').length === 5);
+    assert.equal(await page.evaluate(() => client().reference.duration), 10);
+    await page.locator('#referenceVisual').fill('原片人物转身，展示另一品牌商品');
+    await page.getByRole('button', { name: '保存本镜', exact: true }).click();
+    await page.locator('[data-action="reference-tab"][data-value="台词与声音"]').click();
+    await page.locator('#referenceSpeech').fill('原片品牌，活动价999元。');
+    await page.getByRole('button', { name: '保存本镜', exact: true }).click();
+    await page.locator('[data-action="reference-tab"][data-value="花字与改编"]').click();
+    await page.locator('#referenceAdapt').fill('当前外套正面展示，参考转身动作，保留自己的款式与人物');
+    await page.getByRole('button', { name: '保存本镜', exact: true }).click();
+    await page.getByRole('button', { name: '只借当前镜头' }).click();
+    await page.getByRole('button', { name: '应用选中镜头' }).click();
+    assert.match(await page.locator('#referencePlanError').innerText(), /来源与使用范围/);
+    await page.locator('#referenceRights').check();
+    await page.locator('#referenceIntent').selectOption('参考动作与机位');
+    await page.getByRole('button', { name: '应用选中镜头' }).click();
+    await page.locator('.studio-steps').waitFor();
+    assert.equal(await page.evaluate(() => state.config.draftId), original.workId);
+    const adapted = await page.evaluate(() => collabCopy(getShots()));
+    assert.deepEqual(adapted.slice(1), original.shots.slice(1));
+    assert.equal(adapted[0].speech, original.shots[0].speech);
+    assert.equal(adapted[0].reference.speech, '原片品牌，活动价999元。');
+    assert.equal(adapted[0].reference.intent, '参考动作与机位');
+    assert.equal(await page.evaluate(() => state.config.claims), original.claims);
+    await page.locator('.reference-plan-comparison>summary').click();
+    await page.waitForFunction(() => [...document.querySelectorAll('.reference-compare-frame')].every(image => image.complete && image.naturalWidth > 0));
+    await page.evaluate(() => { document.querySelector('.toast')?.classList.remove('visible'); window.scrollTo(0, 0); });
+    await page.screenshot({ path: path.join(root, '差异化-单镜参考改编.png') });
+    await page.getByRole('button', { name: '返回方案确认' }).click();
+    assert.ok(!(await page.evaluate(() => flowPrompt())).includes('999元'));
+    await page.locator('#flowApprove').check();
+    await page.getByRole('button', { name: '确认并创建 1 条产单' }).click();
+    await page.getByRole('heading', { name: '制作与检查', exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => client().jobs[0].accepted.shots[0].reference.originalIndex), 0);
+    const sourcePlanSignature = await page.evaluate(() => flowProject().accepted.signature);
+    checks.push('真实10秒参考文件上传与五帧抽取、人工拆解、单镜授权与替换、原台词和当前商品分离、其余镜头不变、来源快照随确认版本保存');
+    await page.getByRole('button', { name: '场景变体排产', exact: true }).click();
+    assert.equal(await page.locator('#batchLimit').inputValue(), '3');
+    await page.locator('[data-action="batch-toggle"][data-dimension="scenes"][data-value="厨房餐桌"]').click();
+    await page.locator('[data-action="batch-toggle"][data-dimension="scenes"][data-value="户外日常"]').click();
+    await page.locator('[data-action="batch-toggle"][data-dimension="scenes"][data-value="桌面操作"]').click();
+    assert.equal(await page.evaluate(() => workspaceCombinations(viewState.batch).length), 3);
+    const baseline = await page.evaluate(() => getShots().map(shot => shot.speech));
+    const before = await page.evaluate(() => ({ jobs: client().jobs.length, works: client().projects.length, budget: client().budget }));
+    await page.evaluate(() => { document.querySelector('.toast')?.classList.remove('visible'); window.scrollTo(0, 0); });
+    await page.screenshot({ path: path.join(root, '差异化-单变量场景排产.png') });
+    await page.getByRole('button', { name: '创建这批产单' }).click();
+    await page.getByRole('heading', { name: '工作队列', exact: true }).waitFor();
+    const jobs = await page.evaluate(() => collabCopy(client().jobs.filter(job => job.variation?.dimension === 'scenes')));
+    assert.equal(jobs.length, 3);
+    assert.equal(await page.evaluate(() => client().projects.length), before.works + 3);
+    assert.equal(await page.evaluate(() => client().jobs.length), before.jobs + 3);
+    assert.equal(await page.evaluate(() => client().budget), before.budget);
+    assert.equal(await page.evaluate(() => client().ledger.length), 0);
+    assert.ok(jobs.every(job => job.cost === null && job.variation.sourcePlanSignature === sourcePlanSignature && job.variation.sourceWorkId === original.workId));
+    assert.ok(jobs.every(job => JSON.stringify(job.shots.map(shot => shot.speech)) === JSON.stringify(baseline)));
+    assert.equal(new Set(jobs.map(job => job.config.scene)).size, 3);
+    assert.ok(jobs.every(job => job.projectId && job.campaignId && job.variation.humanReviewRequired));
+    await nav('projects');
+    const sourceProjectId = await page.evaluate(() => collabFindWork(state.config.draftId).project.id);
+    assert.equal(await page.evaluate(id => collabCounts(collabCampaign(id)).works, sourceProjectId), before.works + 3);
+    await nav('runs');
+    assert.equal(await page.locator('.collab-runs-table tbody tr').count(), before.jobs + 3);
+    await page.locator('[data-action="collab-run-detail"]').first().click();
+    assert.match(await page.getByRole('dialog').innerText(), /未提交供应商/);
+    await page.getByRole('button', { name: '关闭', exact: true }).click();
+    checks.push('单变量场景预览、默认上限3、只建产单、保留台词与商品事实、来源方案可追溯、新作品与生成任务分别关联、报价未知且零消耗');
+    for (const width of [1500, 1024, 768, 390]) {
+      await page.setViewportSize({ width, height: 1080 });
+      for (const view of ['studio', 'brief', 'batch', 'projects', 'runs']) {
+        await nav(view);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false, `${view} overflow at ${width}`);
+      }
+    }
+    assert.deepEqual(errors, []);
+    assert.deepEqual(external, []);
+    const result = { status: 'passed', checks, pageErrors: errors, externalRequests: external, fixture: '对既有本地10秒WebM仅补Duration元数据，不改变视频帧；非AI生成', limitations: '未执行自动拆解、动作复刻、图像或视频模型调用' };
+    fs.writeFileSync(path.join(root, '参考与场景变体验证.json'), JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(result, null, 2));
+  } finally { await browser.close(); }
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });
