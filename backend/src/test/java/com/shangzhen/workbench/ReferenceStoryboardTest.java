@@ -30,9 +30,11 @@ class ReferenceStoryboardTest {
     static final List<String> requests=new CopyOnWriteArrayList<>();
     static volatile boolean fail;
     static volatile String output="{}";
+    static volatile java.util.concurrent.CountDownLatch gate;
     static final HttpServer server;
     static {try{server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);server.createContext("/v1beta/models/test-vision:generateContent",e->{
         requests.add(new String(e.getRequestBody().readAllBytes(),StandardCharsets.UTF_8));
+        var waiting=gate;if(waiting!=null)try{waiting.await(8,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
         String result=requests.get(requests.size()-1).contains("audio/wav")?"{\"dialogue\":[{\"start\":0,\"end\":1,\"text\":\"不得覆盖字幕\"},{\"start\":2,\"end\":4,\"text\":\"无字幕原声\"}]}":output;
         String body=fail?"gateway timeout":new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(Map.of("candidates",List.of(Map.of("finishReason","STOP","content",Map.of("parts",List.of(Map.of("text",result))))),"usageMetadata",Map.of("promptTokenCount",500)));
         byte[] bytes=body.getBytes(StandardCharsets.UTF_8);e.sendResponseHeaders(fail?524:200,bytes.length);e.getResponseBody().write(bytes);e.close();});server.start();}catch(Exception e){throw new RuntimeException(e);}}
@@ -46,18 +48,26 @@ class ReferenceStoryboardTest {
         doReturn(4d).when(service).duration(any(Path.class));
         doReturn(List.of(shot("a",0,2),shot("b",2,4))).when(service).detect(any(Path.class),anyDouble());
         doReturn(file).when(service).clip(any(Path.class),any(Path.class),anyString(),anyDouble(),anyDouble(),anyBoolean());
-        output=s.write(Map.of("shots",List.of(Map.of("id","a","action","展示双瓶","camera","固定","transition","开头"),Map.of("id","b","action","连续按压","camera","固定","transition","连续")),"dialogue",List.of(Map.of("start",0,"end",2,"text","字幕原文")),"audio_gaps",List.of(),"summary","展示使用","music","背景音乐"));
+        output=s.write(Map.of("shots",List.of(Map.of("id","a","action","展示双瓶","camera","固定","transition","开头","text","","productText","瓶身品牌"),Map.of("id","b","action","连续按压","camera","固定","transition","连续","text","后期功效词","productText","SPF印字")),"dialogue",List.of(Map.of("start",0,"end",2,"text","字幕原文")),"audio_gaps",List.of(),"summary","展示使用","music","背景音乐"));
         String path="/api/clients/"+c+"/assets/"+a+"/storyboard";
         mvc.perform(get(path).with(user("other"))).andExpect(status().isNotFound());
         mvc.perform(post(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"revision\":0,\"confirmed\":false}" )).andExpect(status().isBadRequest());
         mvc.perform(post(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"revision\":0,\"confirmed\":true}" )).andExpect(status().isOk());
         mvc.perform(post(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"revision\":0,\"confirmed\":true}" )).andExpect(status().isConflict());
-        service.tick();await().atMost(Duration.ofSeconds(10)).until(()->service.get(c,a).get("status").equals("COMPLETED"));
+        gate=new java.util.concurrent.CountDownLatch(1);
+        try {
+            service.tick();await().atMost(Duration.ofSeconds(5)).until(()->!requests.isEmpty());
+            mvc.perform(get(path).with(user("admin"))).andExpect(jsonPath("$.status").value("RUNNING")).andExpect(jsonPath("$.progress.phase").value("读取整片画面与字幕（2个候选镜头）"));
+        } finally {gate.countDown();gate=null;}
+        await().atMost(Duration.ofSeconds(10)).until(()->service.get(c,a).get("status").equals("COMPLETED"));
         assertThat(requests).hasSize(1);assertThat(requests.get(0)).contains("inlineData","AQIDBA==","video/mp4").doesNotContain("video_url");
         Report report=(Report)service.get(c,a).get("report");assertThat(report.dialogue().get(0).source()).isEqualTo("subtitle");
-        Report merged=new Report(4,List.of(new Shot("a",0,4,"手动合并","固定","开头","无","","已核对")),report.dialogue(),report.summary(),report.music(),List.of());
+        assertThat(report.shots().get(0).text()).isEmpty();assertThat(report.shots().get(0).productText()).isEqualTo("瓶身品牌");assertThat(report.shots().get(1).text()).isEqualTo("后期功效词");
+        assertThat(((Map<?,?>)service.get(c,a).get("progress")).get("phase")).isEqualTo("分析完成");
+        assertThat(requests.get(0)).contains("productText","文字随瓶身透视");
+        Report merged=new Report(4,List.of(new Shot("a",0,4,"手动合并","固定","开头","无","","已核对","瓶身品牌")),report.dialogue(),report.summary(),report.music(),List.of());
         int rev=(int)service.get(c,a).get("revision");
-        mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("revision",rev,"report",merged)))).andExpect(status().isOk()).andExpect(jsonPath("$.report.shots.length()").value(1));
+        mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("revision",rev,"report",merged)))).andExpect(status().isOk()).andExpect(jsonPath("$.report.shots.length()").value(1)).andExpect(jsonPath("$.report.shots[0].productText").value("瓶身品牌"));
         mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("revision",rev,"report",merged)))).andExpect(status().isConflict());
         output="{\"action\":\"补读建议\",\"camera\":\"固定\",\"transition\":\"连续\",\"review\":\"待核对\"}";
         service.start(c,a,new ReferenceStoryboardController.Start((int)service.get(c,a).get("revision"),true,"a",false));service.tick();

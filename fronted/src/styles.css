@@ -2617,3 +2617,10 @@ h1 {
 .reference-video-choice { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
 .reference-video-choice > button:first-child { min-width: 0; overflow-wrap: anywhere; }
 .reference-video-choice .reference-delete { color: #b23c2b; flex-shrink: 0; }
+.read-progress-panel { margin: 14px 0; padding: 16px; border: 1px solid #ecd6c1; border-radius: 8px; background: #fff8ef; }
+.read-progress-panel p { margin: 8px 0 0; color: #776453; font-size: 13px; }
+.read-progress-track { height: 8px; margin-top: 12px; overflow: hidden; border-radius: 8px; background: #eddfd1; }
+.read-progress-track span { display: block; width: 35%; height: 100%; border-radius: inherit; background: #b95527; animation: read-progress-slide 1.6s ease-in-out infinite alternate; }
+.read-completed { color: #39744c; margin: 12px 0; }
+@keyframes read-progress-slide { from { transform: translateX(-90%); } to { transform: translateX(280%); } }
+@media (prefers-reduced-motion: reduce) { .read-progress-track span { animation: none; width: 100%; opacity: .65; } }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fileUrl, post, put, request } from '../api';
 import { ErrorState, Field, Modal, useAction, useWorkspace } from './UI';
 import { applyReadSuggestion, mergeReadShots, splitReadShot, type ReadShot, type StoryboardReport, type StoryboardState } from '../storyboard';
@@ -7,16 +7,21 @@ import type { ReferenceMark } from '../remake';
 
 export default function ReferenceStoryboard({ assetId, onUse }: { assetId: string; onUse: (marks: ReferenceMark[], duration: number) => void }) {
   const { client } = useWorkspace(), action = useAction();
+  const cache = useQueryClient();
   const endpoint = `/clients/${client.id}/assets/${assetId}/storyboard`;
-  const query = useQuery<StoryboardState>({ queryKey: [client.id, assetId, 'storyboard'], queryFn: () => request(endpoint), refetchInterval: q => ['QUEUED', 'RUNNING'].includes(q.state.data?.status ?? '') ? 2500 : false });
+  const queryKey = [client.id, assetId, 'storyboard'];
+  const query = useQuery<StoryboardState>({ queryKey, queryFn: () => request(endpoint), refetchInterval: q => ['QUEUED', 'RUNNING'].includes(q.state.data?.status ?? '') ? 2000 : false, refetchIntervalInBackground: true, refetchOnWindowFocus: 'always' });
   const [draft, setDraft] = useState<StoryboardReport | null>(null), [revision, setRevision] = useState(-1), [dirty, setDirty] = useState(false);
   const [selected, setSelected] = useState(0), [tab, setTab] = useState<'shots' | 'dialogue' | 'overall'>('shots');
   const [position, setPosition] = useState(0), [confirm, setConfirm] = useState<{ shotId?: string; slow: boolean } | null>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const data = query.data, busy = action.busy || ['QUEUED', 'RUNNING'].includes(data?.status ?? '');
+  const hydrated = useRef<StoryboardState | null>(null);
+  const [clock, setClock] = useState(Date.now());
+  const data = query.data, running = ['QUEUED', 'RUNNING'].includes(data?.status ?? ''), busy = action.busy || running;
   useEffect(() => {
-    if (data && !dirty && data.revision !== revision) { setDraft(data.report ? structuredClone(data.report) : null); setRevision(data.revision); setSelected(i => Math.min(i, (data.report?.shots.length ?? 1) - 1)); }
+    if (data && !dirty && (hydrated.current !== data || revision === -1)) { hydrated.current = data; setDraft(data.report ? structuredClone(data.report) : null); setRevision(data.revision); setSelected(i => Math.max(0, Math.min(i, (data.report?.shots.length ?? 1) - 1))); }
   }, [data, dirty, revision]);
+  useEffect(() => { if (!running) return; setClock(Date.now()); const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => window.clearInterval(timer); }, [running]);
   useEffect(() => { if (!dirty) return; const leave = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener('beforeunload', leave); return () => window.removeEventListener('beforeunload', leave); }, [dirty]);
   const shot = draft?.shots[selected];
   const suggestions = draft?.suggestions.filter(s => s.shotId === shot?.id && s.targetStart === shot.start && s.targetEnd === shot.end) ?? [];
@@ -25,19 +30,25 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
   async function save() {
     if (!draft) return;
     const result = await put<StoryboardState>(endpoint, { revision, report: draft });
+    cache.setQueryData(queryKey, result);
     setDirty(false); setRevision(result.revision); setDraft(result.report ?? null); await query.refetch();
   }
   function seek(at: number) { if (video.current) video.current.currentTime = at; }
   return <section className="reference-storyboard panel padded">
     <div className="row between"><h2>参考片分镜</h2><div className="row">
-      <button disabled={busy || dirty || !data?.enabled} onClick={() => setConfirm({ slow: false })}>{draft ? '重新分析整片' : 'AI 读取视频'}</button>
+      <button disabled={busy || dirty || !data?.enabled} onClick={() => setConfirm({ slow: false })}>{running ? '正在分析…' : draft ? '重新分析整片' : 'AI 读取视频'}</button>
       {draft && <button className="primary" disabled={busy || !dirty} onClick={() => void action.run(save, '分镜已保存')}>保存分镜</button>}
     </div></div>
     {query.error && <ErrorState error={query.error} retry={() => void query.refetch()} />}
     {action.error && <ErrorState error={new Error(action.error)} />}
     {data?.error && <p className="error-box">{data.error}</p>}
     {data && !data.enabled && <p className="hint">尚未配置视频分析模型，可使用下方人工拆解。</p>}
-    {busy && <p role="status">{data?.status === 'QUEUED' ? '已排队' : '正在处理'}：整片读取 / 无字幕音频补词 / 短镜补读。任务已保存，可稍后返回。</p>}
+    {running && <div className="read-progress-panel">
+      <div className="row between"><strong role="status">{data?.progress?.phase || (data?.status === 'QUEUED' ? '等待开始' : '正在读取视频')}</strong><span>已等待 {Math.max(0, Math.floor((data?.progress?.elapsedSeconds ?? 0) + (clock - query.dataUpdatedAt) / 1000))} 秒</span></div>
+      <div className="read-progress-track" role="progressbar" aria-label="视频分析进度" aria-valuetext={data?.progress?.phase ?? '正在处理'}><span /></div>
+      <p>{draft ? '已返回的分镜可先查看，剩余步骤完成后自动更新。' : '结果会自动显示，无需刷新。'}{query.isError ? '连接暂时中断，正在重新获取进度。' : '处理中可稍后返回。'}</p>
+    </div>}
+    {!running && data?.status === 'COMPLETED' && <p className="read-completed" role="status">分析完成，结果已更新{data.progress ? ` · 用时 ${data.progress.elapsedSeconds} 秒` : ''}</p>}
     {dirty && <p className="hint">有未保存修改。先保存，再补读或重新分析。<button onClick={() => { setDirty(false); setRevision(-1); }}>放弃本地修改，读取已保存版</button></p>}
     <div className="read-workbench">
       <div className="read-player">
@@ -45,7 +56,7 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
         <div className="row between"><span>{position.toFixed(2)} 秒</span>{shot && <button onClick={() => seek(shot.start)}>定位当前镜头</button>}</div>
       </div>
       <div className="read-editor">
-        {!draft ? <p className="muted">点击“AI 读取视频”生成可编辑分镜。字幕优先，无字幕语音区间再读音频。</p> : <>
+        {!draft ? <p className="muted">{running ? '正在整理画面、对白字幕与文字分类…' : '点击“AI 读取视频”生成可编辑分镜。字幕优先，无字幕语音区间再读音频。'}</p> : <>
           <nav className="product-view-tabs" aria-label="分镜信息分类">{([['shots', '画面与镜头'], ['dialogue', '台词与字幕'], ['overall', '全片结构与声音']] as const).map(([key, label]) => <button key={key} aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}</nav>
           <fieldset disabled={busy} className="read-fields">
           {tab === 'shots' && <>
@@ -57,8 +68,9 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
               <div className="row read-shot-actions"><button disabled={selected === draft.shots.length - 1} onClick={() => void action.run(async () => edit(mergeReadShots(draft, selected)))}>与后一镜合并</button><button onClick={() => void action.run(async () => edit(splitReadShot(draft, selected, position)))}>在播放位置拆分</button>
                 <button disabled={dirty || !data?.enabled} onClick={() => setConfirm({ shotId: shot.id, slow: false })}>补读此镜头</button><button disabled={dirty || !data?.enabled} onClick={() => setConfirm({ shotId: shot.id, slow: true })}>慢放复核</button>
               </div>
-              <div className="read-field-grid">{([['action', '构图、主体与动作'], ['camera', '机位 / 运镜'], ['transition', '与前镜衔接'], ['effects', '镜内特效 / 速度'], ['text', '花字 / 画面文字'], ['review', '切点证据 / 待核对']] as const).map(([key, label]) => <Field key={key} label={label}><textarea rows={key === 'action' ? 4 : 2} maxLength={2000} value={shot[key]} onChange={e => field(key, e.target.value)} /></Field>)}</div>
-              {suggestions.length > 0 && <div className="read-suggestions"><h3>补读建议 · 不自动覆盖</h3>{suggestions.map((suggestion, i) => <article key={i}><strong>{suggestion.slow ? '3倍慢放复核' : '原速补读'} · 包含前后画面</strong><p>{suggestion.action}</p><p>机位：{suggestion.camera} · 衔接：{suggestion.transition}</p><p>特效：{suggestion.effects} · 花字：{suggestion.text}</p><p>{suggestion.review}</p><button onClick={() => void action.run(async () => edit(applyReadSuggestion(draft, suggestion)))}>采用这份建议</button></article>)}</div>}
+              <div className="read-field-grid">{([['action', '构图、主体与动作'], ['camera', '机位 / 运镜'], ['transition', '与前镜衔接'], ['effects', '镜内特效 / 速度'], ['text', shot.productText == null ? '旧版画面文字（待分类）' : '花字（后期叠加）'], ['productText', '产品文字（瓶身 / 包装印字）'], ['review', '切点证据 / 待核对']] as const).map(([key, label]) => <Field key={key} label={label}><textarea rows={key === 'action' ? 4 : 2} maxLength={2000} value={shot[key] ?? ''} onChange={e => field(key, e.target.value)} /></Field>)}</div>
+              {!!shot.text && <button onClick={() => edit({ ...draft, shots: draft.shots.map((s, i) => i === selected ? { ...s, productText: [s.productText, s.text].filter(Boolean).join('\n'), text: '' } : s) })}>将这段文字移到产品文字</button>}
+              {suggestions.length > 0 && <div className="read-suggestions"><h3>补读建议 · 不自动覆盖</h3>{suggestions.map((suggestion, i) => <article key={i}><strong>{suggestion.slow ? '3倍慢放复核' : '原速补读'} · 包含前后画面</strong><p>{suggestion.action}</p><p>机位：{suggestion.camera} · 衔接：{suggestion.transition}</p><p>特效：{suggestion.effects} · {suggestion.productText == null ? '旧版文字（待分类）' : '后期花字'}：{suggestion.text}</p><p>产品文字：{suggestion.productText || '无'}</p><p>{suggestion.review}</p><button onClick={() => void action.run(async () => edit(applyReadSuggestion(draft, suggestion)))}>采用这份建议</button></article>)}</div>}
             </>}
           </>}
           {tab === 'dialogue' && <>
@@ -81,7 +93,7 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
       <p>本次分析可能产生费用。</p>
       <p>{confirm.shotId ? `${confirm.slow ? '3倍慢放无声复核' : '原速补读'}，包含前后各约1秒画面；结果仅作为建议。` : '整片原速读取；有无字幕语音时增加一次音频调用；最多自动补读3个短镜头，总计最多5次调用。重新分析会替换已保存的分镜编辑。'}</p>
       <p>遇到超时不会自动重发；供应商是否计费以其账单为准。</p>
-      <button className="primary" disabled={busy} onClick={() => void action.run(async () => { await post(endpoint, { revision, confirmed: true, ...confirm }); setConfirm(null); await query.refetch(); })}>确认并开始分析</button>
+      <button className="primary" disabled={busy} onClick={() => void action.run(async () => { const accepted = await post<StoryboardState>(endpoint, { revision, confirmed: true, ...confirm }); cache.setQueryData(queryKey, accepted); setConfirm(null); await query.refetch(); })}>确认并开始分析</button>
     </Modal>}
   </section>;
 }
