@@ -56,7 +56,7 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
         <div className="row between"><span>{position.toFixed(2)} 秒</span>{shot && <button onClick={() => seek(shot.start)}>定位当前镜头</button>}</div>
       </div>
       <div className="read-editor">
-        {!draft ? <p className="muted">{running ? '正在整理画面、对白字幕与文字分类…' : '点击“AI 读取视频”生成可编辑分镜。字幕优先，无字幕语音区间再读音频。'}</p> : <>
+        {!draft ? <p className="muted">{running ? '正在整理画面、对白字幕与后期花字…' : '点击“AI 读取视频”生成可编辑分镜。字幕优先，无字幕语音区间再读音频。'}</p> : <>
           <nav className="product-view-tabs" aria-label="分镜信息分类">{([['shots', '画面与镜头'], ['dialogue', '台词与字幕'], ['overall', '全片结构与声音']] as const).map(([key, label]) => <button key={key} aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}</nav>
           <fieldset disabled={busy} className="read-fields">
           {tab === 'shots' && <>
@@ -68,9 +68,8 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
               <div className="row read-shot-actions"><button disabled={selected === draft.shots.length - 1} onClick={() => void action.run(async () => edit(mergeReadShots(draft, selected)))}>与后一镜合并</button><button onClick={() => void action.run(async () => edit(splitReadShot(draft, selected, position)))}>在播放位置拆分</button>
                 <button disabled={dirty || !data?.enabled} onClick={() => setConfirm({ shotId: shot.id, slow: false })}>补读此镜头</button><button disabled={dirty || !data?.enabled} onClick={() => setConfirm({ shotId: shot.id, slow: true })}>慢放复核</button>
               </div>
-              <div className="read-field-grid">{([['action', '构图、主体与动作'], ['camera', '机位 / 运镜'], ['transition', '与前镜衔接'], ['effects', '镜内特效 / 速度'], ['text', shot.productText == null ? '旧版画面文字（待分类）' : '花字（后期叠加）'], ['productText', '产品文字（瓶身 / 包装印字）'], ['review', '切点证据 / 待核对']] as const).map(([key, label]) => <Field key={key} label={label}><textarea rows={key === 'action' ? 4 : 2} maxLength={2000} value={shot[key] ?? ''} onChange={e => field(key, e.target.value)} /></Field>)}</div>
-              {!!shot.text && <button onClick={() => edit({ ...draft, shots: draft.shots.map((s, i) => i === selected ? { ...s, productText: [s.productText, s.text].filter(Boolean).join('\n'), text: '' } : s) })}>将这段文字移到产品文字</button>}
-              {suggestions.length > 0 && <div className="read-suggestions"><h3>补读建议 · 不自动覆盖</h3>{suggestions.map((suggestion, i) => <article key={i}><strong>{suggestion.slow ? '3倍慢放复核' : '原速补读'} · 包含前后画面</strong><p>{suggestion.action}</p><p>机位：{suggestion.camera} · 衔接：{suggestion.transition}</p><p>特效：{suggestion.effects} · {suggestion.productText == null ? '旧版文字（待分类）' : '后期花字'}：{suggestion.text}</p><p>产品文字：{suggestion.productText || '无'}</p><p>{suggestion.review}</p><button onClick={() => void action.run(async () => edit(applyReadSuggestion(draft, suggestion)))}>采用这份建议</button></article>)}</div>}
+              <div className="read-field-grid">{([['action', '构图、主体与动作'], ['camera', '机位 / 运镜'], ['transition', '与前镜衔接'], ['effects', '镜内特效 / 速度'], ['text', '花字（后期叠加）'], ['review', '切点证据 / 待核对']] as const).map(([key, label]) => <Field key={key} label={label}><textarea rows={key === 'action' ? 4 : 2} maxLength={2000} value={shot[key] ?? ''} onChange={e => field(key, e.target.value)} /></Field>)}</div>
+              {suggestions.length > 0 && <div className="read-suggestions"><h3>补读建议 · 不自动覆盖</h3>{suggestions.map((suggestion, i) => <article key={i}><strong>{suggestion.slow ? '3倍慢放复核' : '原速补读'} · 包含前后画面</strong><p>{suggestion.action}</p><p>机位：{suggestion.camera} · 衔接：{suggestion.transition}</p><p>特效：{suggestion.effects} · 后期花字：{suggestion.text}</p><p>{suggestion.review}</p><button onClick={() => void action.run(async () => edit(applyReadSuggestion(draft, suggestion)))}>采用这份建议</button></article>)}</div>}
             </>}
           </>}
           {tab === 'dialogue' && <>

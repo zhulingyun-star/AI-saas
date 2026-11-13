@@ -62,9 +62,9 @@ class ReferenceStoryboardTest {
         await().atMost(Duration.ofSeconds(10)).until(()->service.get(c,a).get("status").equals("COMPLETED"));
         assertThat(requests).hasSize(1);assertThat(requests.get(0)).contains("inlineData","AQIDBA==","video/mp4").doesNotContain("video_url");
         Report report=(Report)service.get(c,a).get("report");assertThat(report.dialogue().get(0).source()).isEqualTo("subtitle");
-        assertThat(report.shots().get(0).text()).isEmpty();assertThat(report.shots().get(0).productText()).isEqualTo("瓶身品牌");assertThat(report.shots().get(1).text()).isEqualTo("后期功效词");
+        assertThat(report.shots().get(0).text()).isEmpty();assertThat(report.shots().get(0).productText()).isNull();assertThat(report.shots().get(1).text()).isEqualTo("后期功效词");
         assertThat(((Map<?,?>)service.get(c,a).get("progress")).get("phase")).isEqualTo("分析完成");
-        assertThat(requests.get(0)).contains("productText","文字随瓶身透视");
+        assertThat(requests.get(0)).contains("产品印字不读取","文字随瓶身透视");
         Report merged=new Report(4,List.of(new Shot("a",0,4,"手动合并","固定","开头","无","","已核对","瓶身品牌")),report.dialogue(),report.summary(),report.music(),List.of());
         int rev=(int)service.get(c,a).get("revision");
         mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("revision",rev,"report",merged)))).andExpect(status().isOk()).andExpect(jsonPath("$.report.shots.length()").value(1)).andExpect(jsonPath("$.report.shots[0].productText").value("瓶身品牌"));
