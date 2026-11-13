@@ -4,6 +4,7 @@ import path from 'node:path';
 test('replace copy, keep overlays off, confirm prompt, submit only after review', async ({ page }, info) => {
   let state: any = { revision: 0, status: 'EMPTY', phase: '', error: '', stale: false, enabled: true, videoEnabled: true };
   let submits = 0;
+  let promptPolls = 0;
   let history: any[] = [];
   const copy = { relation: '跨品类', reason: '护肤品与鞋用途不同', approach: '按鞋面细节重建动作', duration: 19, overlaysOn: false, confirmed: false, notes: '缓震待确认',
     lines: [{ id: 'line1', start: 0, end: 2, original: '原片台词', text: '看看鞋面的拼接' }], overlays: [{ id: 'shot1', start: 0, end: 2, original: '提亮', text: '', enabled: false }] };
@@ -23,11 +24,11 @@ test('replace copy, keep overlays off, confirm prompt, submit only after review'
     if (p.endsWith('/thumbnail')) return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg"/>' });
     if (p.endsWith('/remake/ref/product/copy') && method === 'POST') { const body = route.request().postDataJSON(); expect(body.overlays).toBe(false); expect(body.duration).toBe(19); state = { ...state, revision: 1, status: 'READY', draft: copy }; return json(state); }
     if (p.endsWith('/remake/ref/product/prompt') && method === 'PUT') { state = { ...state, revision: state.revision + 1, prompt: route.request().postDataJSON().prompt }; return json(state); }
-    if (p.endsWith('/remake/ref/product/prompt') && method === 'POST') { expect(state.draft.confirmed).toBe(true); state = { ...state, revision: state.revision + 1, status: 'READY', prompt: '已确认商品的视频提示词' }; return json(state); }
+    if (p.endsWith('/remake/ref/product/prompt') && method === 'POST') { expect(state.draft.confirmed).toBe(true); state = { ...state, revision: state.revision + 1, status: 'RUNNING', phase: '根据商品差异写电商出片词', partialPrompt: '已确认商品', streamedChars: 5 }; return json(state); }
     if (p.endsWith('/remake/ref/product/render') && method === 'POST') { submits++; expect(state.prompt).toBeTruthy(); expect(route.request().postDataJSON().resolution).toBe('480p'); history.unshift({ id: 'job'+submits, status: 'COMPLETED', progress: 100, message: '测试完成', hasOutput: false, createdAt: '2026-11-13T10:00:00', prompt: state.prompt, resolution: '480p' }); state.revision++; return json({ projectId: 'work', job: { id: 'job'+submits } }); }
     if (p.endsWith('/remake/ref/product/renders')) return json(history);
     if (p.endsWith('/remake/ref/product') && method === 'PUT') { const body = route.request().postDataJSON(); state = { ...state, revision: state.revision + 1, draft: body.draft, prompt: '' }; return json(state); }
-    if (p.endsWith('/remake/ref/product')) return json(state);
+    if (p.endsWith('/remake/ref/product')) { if (state.status === 'RUNNING' && ++promptPolls >= 3) state = { ...state, status: 'READY', prompt: '已确认商品的视频提示词' }; return json(state); }
     if (p.endsWith('/jobs')) return json([]);
     return json([]);
   });
@@ -58,7 +59,9 @@ test('replace copy, keep overlays off, confirm prompt, submit only after review'
   await expect(page.getByRole('heading', { name: '视频制作', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '生成视频提示词' }).click();
   await page.getByRole('button', { name: '确认并继续' }).click();
-  await expect(page.getByRole('textbox', { name: '视频提示词', exact: true })).toHaveValue('已确认商品的视频提示词');
+  await expect(page.getByLabel('视频提示词 · 实时生成中')).toHaveValue('已确认商品');
+  await expect(page.getByRole('button', { name: '确认提示词，生成视频' })).toBeDisabled();
+  await expect(page.getByRole('textbox', { name: '视频提示词', exact: true })).toHaveValue('已确认商品的视频提示词', { timeout: 10000 });
   await expect(page.getByRole('button', { name: '确认提示词，生成视频' })).toBeEnabled();
   await page.screenshot({ path: info.outputPath('copy-review.png'), fullPage: true });
   expect(submits).toBe(0);

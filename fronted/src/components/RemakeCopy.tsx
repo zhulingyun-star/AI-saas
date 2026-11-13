@@ -8,7 +8,7 @@ import type { StoryboardState } from '../storyboard';
 import type { Asset } from '../types';
 
 interface Draft { relation: string; reason: string; approach: string; lines: { id: string; start: number; end: number; original: string; text: string }[]; overlays: { id: string; start: number; end: number; original: string; text: string; enabled: boolean }[]; overlaysOn: boolean; duration: number; notes: string; confirmed: boolean }
-interface State { id?: string; revision: number; status: string; phase: string; error: string; stale: boolean; enabled: boolean; videoEnabled: boolean; targetDuration?: number; draft?: Draft; prompt?: string; taskKind?: string; referenceImages?: Asset[] }
+interface State { id?: string; revision: number; status: string; phase: string; error: string; stale: boolean; enabled: boolean; videoEnabled: boolean; targetDuration?: number; draft?: Draft; prompt?: string; taskKind?: string; partialPrompt?: string; streamedChars?: number; referenceImages?: Asset[] }
 interface Render { id: string; status: string; progress: number; message: string; hasOutput: boolean; createdAt: string; prompt: string; resolution: string }
 export default function RemakeCopy({ campaignId, assetId, stage = 'copy', onStage, onNavigation, onReference }: { campaignId: string; assetId: string; stage?: 'copy' | 'prompt'; onStage?: (stage: 'copy' | 'prompt') => void; onReference?: () => void; onNavigation?: (state: { dirty: boolean; promptReady: boolean }) => void }) {
   const { client } = useWorkspace(), action = useAction(), cache = useQueryClient();
@@ -41,6 +41,7 @@ export default function RemakeCopy({ campaignId, assetId, stage = 'copy', onStag
       <button disabled={dirty || promptDirty} onClick={stage === 'copy' ? onReference : () => onStage?.('copy')}>{stage === 'copy' ? '返回参考分镜' : '返回台词与花字替换'}</button>
       <div className="row">
         {stage === 'copy' ? <>
+          {draft && <label className="checkbox-line"><input type="checkbox" checked={draft.confirmed} disabled={busy || data?.stale || wrongDuration} onChange={e => { setDraft({ ...draft, confirmed: e.target.checked }); setDirty(true); }} />已核对台词、商品事实及勾选的花字</label>}
           <button disabled={!anchor || busy || !data?.enabled || duration < 4 || duration > 30} onClick={() => setConfirm('copy')}>{draft ? '重新生成替换文案' : '生成替换文案'}</button>
           <button disabled={busy || !dirty || data?.stale || wrongDuration} onClick={() => void action.run(save, '替换文案已保存')}>保存替换文案</button>
           <button className="primary" disabled={!canPrompt || busy} onClick={() => onStage?.('prompt')}>下一步：视频提示词</button>
@@ -68,7 +69,7 @@ export default function RemakeCopy({ campaignId, assetId, stage = 'copy', onStag
     </div>
     </>}
     {query.error && <ErrorState error={query.error} />}{action.error && <ErrorState error={new Error(action.error)} />}{data?.error && <p className="error-box">{data.error}</p>}
-    {running && <div className="read-progress-panel"><strong role="status">{data?.phase || '正在生成…'}</strong><div className="read-progress-track" role="progressbar" aria-label="文案生成进度"><span /></div><p>完成后自动显示，无需刷新。</p></div>}
+    {running && <div className="read-progress-panel"><strong role="status">{data?.phase || '正在生成…'}</strong><div className="read-progress-track" role="progressbar" aria-label="文案生成进度"><span /></div><p>{data?.streamedChars ? `已接收 ${data.streamedChars} 字，正在持续接收…` : '等待生成服务开始返回内容…'}</p></div>}
     {data?.stale && <p className="hint">商品资料或参考分镜已变化，请重新生成替换文案。原稿保留供查看。</p>}
     {wrongDuration && <p className="hint">旧稿为 {draft?.duration} 秒，原片需要 {duration} 秒。请返回第二步重新生成替换文案，旧稿保留供对照。</p>}
     {stage === 'copy' && draft && <>
@@ -77,13 +78,13 @@ export default function RemakeCopy({ campaignId, assetId, stage = 'copy', onStag
         <h3>台词对照</h3><div className="remake-copy-table">{draft.lines.length === 0 ? <p>原片没有台词，可保持纯画面。</p> : draft.lines.map((l, i) => <article key={l.id}><div><small>原片 {l.start.toFixed(2)}–{l.end.toFixed(2)}秒</small><p>{l.original}</p></div><Field label={`我们商品的第${i + 1}句台词`}><textarea maxLength={300} rows={2} value={l.text} onChange={e => change({ ...draft, lines: draft.lines.map(x => x.id === l.id ? { ...x, text: e.target.value } : x) })} /></Field></article>)}</div>
         {draft.overlaysOn && <><h3>花字对照</h3>{!draft.overlays.length && <p>参考片没有可替换的后期花字。</p>}{draft.overlays.map((o, i) => <article className="remake-overlay-row" key={o.id}><label className="checkbox-line"><input type="checkbox" checked={o.enabled} onChange={e => change({ ...draft, overlays: draft.overlays.map(x => x.id === o.id ? { ...x, enabled: e.target.checked } : x) })} />使用第{i + 1}条花字</label><p>原片：{o.original}</p><Field label={`我们商品的第${i + 1}条花字`}><input maxLength={100} value={o.text} onChange={e => change({ ...draft, overlays: draft.overlays.map(x => x.id === o.id ? { ...x, text: e.target.value } : x) })} /></Field></article>)}</>}
         <Field label="需要核对的内容"><textarea rows={2} maxLength={2000} value={draft.notes} onChange={e => change({ ...draft, notes: e.target.value })} /></Field>
-        <label className="checkbox-line"><input type="checkbox" checked={draft.confirmed} onChange={e => { setDraft({ ...draft, confirmed: e.target.checked }); setDirty(true); }} />已核对台词、商品事实及勾选的花字</label>
       </fieldset>
     </>}
     {stage === 'prompt' && <>
       <p>成片 {duration || '…'} 秒 · 竖屏 9:16</p>
       <div className="remake-reference-images" aria-label="本次商品参考图">{(data?.referenceImages ?? products.data?.products.find(p => p.anchorId === anchor)?.assets.filter(a => a.mime.startsWith('image/')) ?? []).map((image, index) => <button key={image.id} type="button" aria-label={`查看商品图片${index + 1}`} onClick={() => setPreview({ id: image.id, index })}><img src={fileUrl(client.id, image.id)} alt={`商品图片${index + 1}`} /><span>图片{index + 1}</span></button>)}</div>
       {!canPrompt && !running && <p className="hint">先在第二步核对并保存替换文案，再生成视频提示词。</p>}
+      {data?.partialPrompt && !data.prompt && <div className="remake-prompt-stream"><Field label={running ? '视频提示词 · 实时生成中' : '已接收的提示词 · 未完成校验'}><textarea rows={16} readOnly value={data.partialPrompt} /></Field><p className="caption">{running ? '内容持续更新，完整接收并校验后可编辑和生成视频。' : '此内容可能不完整，不会直接用于视频生成。'}</p></div>}
       <div className="remake-prompt"><Field label="视频提示词"><textarea rows={16} maxLength={5000} value={promptText} disabled={busy || !canPrompt} placeholder="生成后可修改提示词，保存后再生成视频。" onChange={e => { setPromptText(e.target.value); setPromptDirty(true); }} /></Field><div className="row"><span>{promptText.length} / 5000 字{promptDirty ? ' · 未保存' : ''}</span><Field label="视频清晰度"><select value={resolution} onChange={e => setResolution(e.target.value)}><option>480p</option><option>720p</option><option>1080p</option></select></Field></div></div>
       {renders.error && <ErrorState error={renders.error} />}
       {!!renders.data?.length && <section className="remake-versions" aria-label="生成的视频版本"><h3>视频版本</h3>{renders.data.map((r, i, all) => <article key={r.id}><strong>第 {all.length - i} 版 · {r.resolution} · {r.createdAt.replace('T', ' ')}</strong><p>{r.message}</p>{['QUEUED', 'RUNNING'].includes(r.status) && <progress max={100} value={r.progress} aria-label="视频生成进度" />}{r.hasOutput && <video controls preload="metadata" src={jobUrl(client.id, r.id)} />}<details><summary>此版本使用的提示词</summary><pre>{r.prompt}</pre></details><Link className="button" to={`/queue?campaign=${campaignId}&job=${r.id}`}>查看任务 / 审片</Link></article>)}</section>}

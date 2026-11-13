@@ -58,7 +58,7 @@ public class RemakeDraftService {
     }
     private boolean sourcesMatch(Row r,String snapshot){try{return snapshot!=null&&tree(snapshot).equals(tree(source(r.client(),r.campaign(),r.asset(),r.anchor())));}catch(Exception e){return false;}}
     private boolean stale(Row r){return !sourcesMatch(r,r.draft()==null?r.source():r.resultSource());}
-    public Map<String,Object> get(String c,String p,String a,String g){access(c,p,a,g);Row r=row(c,p,a,g);Map<String,Object> out=new LinkedHashMap<>();out.put("revision",r==null?0:r.revision());out.put("status",r==null?"EMPTY":r.status());out.put("phase",r==null?"":r.phase());out.put("error",r==null?"":r.error());out.put("targetDuration",targetDuration(c,a));out.put("stale",r!=null&&stale(r));out.put("enabled",mode.equals("openai")&&!key.isBlank());out.put("videoEnabled",video.enabled());if(r!=null){out.put("id",r.id());if(r.draft()!=null)out.put("draft",draft(r));out.put("prompt",r.prompt());if(r.resultSource()!=null)out.put("referenceImages",tree(r.resultSource()).path("images"));}return out;}
+    public Map<String,Object> get(String c,String p,String a,String g){access(c,p,a,g);Row r=row(c,p,a,g);Map<String,Object> out=new LinkedHashMap<>();out.put("revision",r==null?0:r.revision());out.put("status",r==null?"EMPTY":r.status());out.put("phase",r==null?"":r.phase());out.put("error",r==null?"":r.error());out.put("targetDuration",targetDuration(c,a));out.put("stale",r!=null&&stale(r));out.put("enabled",mode.equals("openai")&&!key.isBlank());out.put("videoEnabled",video.enabled());if(r!=null){out.put("id",r.id());JsonNode stream=tree(r.request());out.put("partialPrompt",stream.path("partialPrompt").asText(""));out.put("streamedChars",stream.path("streamedChars").asInt());if(r.draft()!=null)out.put("draft",draft(r));out.put("prompt",r.prompt());if(r.resultSource()!=null)out.put("referenceImages",tree(r.resultSource()).path("images"));}return out;}
     private static boolean busy(Row r){return r!=null&&Set.of("QUEUED","RUNNING").contains(r.status());}
     public synchronized Object editPrompt(String c,String p,String a,String g,RemakeDraftController.PromptEdit body){
         access(c,p,a,g);Row r=row(c,p,a,g);if(r==null||busy(r)||r.revision()!=body.revision())throw conflict();
@@ -102,19 +102,35 @@ public class RemakeDraftService {
     private static String str(Object x){return Objects.toString(x,"");}
     private static String text(JsonNode n,String k,int max){if(!n.path(k).isTextual())return "";String v=n.path(k).asText().trim();if(v.length()>max)throw Store.bad("生成字段过长，请精简后重试");return v;}
     private void phase(Row r,String phase){s.db.update("UPDATE remake_drafts SET phase=?,updated_at=? WHERE id=?",phase,Store.now(),r.id());}
-    String reply(Row r,String prompt) throws Exception {
+    String reply(Row r,String prompt) throws Exception { return streamReply(r,prompt,true); }
+    private String streamReply(Row r,String prompt,boolean body) throws Exception {
         JsonNode src=tree(r.source());List<Object> parts=new ArrayList<>();parts.add(Map.of("text",prompt));int i=0;long total=0;
         for(JsonNode image:src.path("images")){byte[] bytes=product.readImage(media.assetPath(r.client(),image.path("id").asText()));total+=bytes.length;if(total>20*1024*1024)throw Store.bad("商品图片总量过大");parts.add(Map.of("text","商品图片"+(++i)));parts.add(Map.of("inlineData",Map.of("mimeType","image/jpeg","data",Base64.getEncoder().encodeToString(bytes))));}
-        URI base=URI.create(url);HttpRequest req=HttpRequest.newBuilder(URI.create(base.getScheme()+"://"+base.getRawAuthority()+"/v1beta/models/"+model+":generateContent")).timeout(Duration.ofSeconds(300)).header("Authorization","Bearer "+key).header("x-goog-api-key",key).header("Content-Type","application/json").header("User-Agent","AI-saas-remake/1.0").POST(HttpRequest.BodyPublishers.ofString(s.write(Map.of("contents",List.of(Map.of("role","user","parts",parts)),"generationConfig",Map.of("temperature",0.2,"maxOutputTokens",6500))))).build();
-        long begin=System.nanoTime();HttpResponse<String> response;
-        try{response=http.send(req,HttpResponse.BodyHandlers.ofString());}
-        catch(java.net.http.HttpTimeoutException e){throw new IllegalStateException("生成服务等待超过300秒，当前步骤超时；旧文案保留",e);}
-        catch(java.io.IOException e){throw new IllegalStateException("生成服务连接中断，未拿到完整响应；旧文案保留",e);}
-        org.slf4j.LoggerFactory.getLogger(getClass()).info("Remake request draft={} status={} seconds={}",r.id(),response.statusCode(),(System.nanoTime()-begin)/1_000_000_000L);
-        if(response.statusCode()!=200)throw new IllegalStateException("生成服务返回HTTP "+response.statusCode()+"，未自动重发");
-        JsonNode result=tree(response.body()).path("candidates").path(0);if(!result.path("finishReason").asText().equals("STOP"))throw new IllegalStateException("生成内容被截断，未自动重发");StringBuilder content=new StringBuilder();for(JsonNode part:result.path("content").path("parts"))if(!part.path("thought").asBoolean())content.append(part.path("text").asText());return content.toString().trim();
+        URI base=URI.create(url);HttpRequest req=HttpRequest.newBuilder(URI.create(base.getScheme()+"://"+base.getRawAuthority()+"/v1beta/models/"+model+":streamGenerateContent?alt=sse")).timeout(Duration.ofSeconds(300)).header("Authorization","Bearer "+key).header("x-goog-api-key",key).header("Content-Type","application/json").header("User-Agent","AI-saas-remake/1.0").header("Accept","text/event-stream").POST(HttpRequest.BodyPublishers.ofString(s.write(Map.of("contents",List.of(Map.of("role","user","parts",parts)),"generationConfig",Map.of("temperature",0.2,"maxOutputTokens",6500))))).build();
+        long begin=System.nanoTime();long[] last={0};
+        var progress=(com.fasterxml.jackson.databind.node.ObjectNode)tree(r.request()).deepCopy();
+        progress.put("partialPrompt","");progress.put("streamedChars",0);
+        s.db.update("UPDATE remake_drafts SET request_json=? WHERE id=?",progress.toString(),r.id());
+        try{
+            String result=GeminiTextStream.generate(http,req,s.json,Duration.ofSeconds(300),text->{
+                long now=System.nanoTime();if(last[0]!=0&&now-last[0]<500_000_000L)return;last[0]=now;
+                progress.put("streamedChars",text.length());if(body)progress.put("partialPrompt",text);
+                s.db.update("UPDATE remake_drafts SET request_json=? WHERE id=? AND status='RUNNING'",progress.toString(),r.id());
+            });
+            progress.put("streamedChars",result.length());if(body)progress.put("partialPrompt",result);
+            s.db.update("UPDATE remake_drafts SET request_json=? WHERE id=?",progress.toString(),r.id());
+            org.slf4j.LoggerFactory.getLogger(getClass()).info("Remake stream draft={} seconds={} chars={}",r.id(),(System.nanoTime()-begin)/1_000_000_000L,result.length());
+            return result;
+        }catch(java.net.http.HttpTimeoutException e){
+            streamFailure(r,begin,e);throw new IllegalStateException("生成服务等待超过300秒；已接收内容保留供查看，未完成校验",e);
+        }catch(java.io.IOException e){
+            streamFailure(r,begin,e);throw new IllegalStateException("生成服务连接中断；已接收内容保留供查看，未完成校验",e);
+        }
     }
-    JsonNode ask(Row r,String prompt) throws Exception {String content=reply(r,prompt);int a=content.indexOf('{'),b=content.lastIndexOf('}');if(a<0||b<a)throw new IllegalStateException("生成内容格式无效");return tree(content.substring(a,b+1));}
+    private void streamFailure(Row r,long begin,Exception e){
+        org.slf4j.LoggerFactory.getLogger(getClass()).warn("Remake stream failed draft={} seconds={} type={}",r.id(),(System.nanoTime()-begin)/1_000_000_000L,e.getClass().getSimpleName());
+    }
+    JsonNode ask(Row r,String prompt) throws Exception {String content=streamReply(r,prompt,false);int a=content.indexOf('{'),b=content.lastIndexOf('}');if(a<0||b<a)throw new IllegalStateException("生成内容格式无效");return tree(content.substring(a,b+1));}
     static String sourcePrompt(String name){
         if(!Set.of("ad-remake-copy.txt","ad-remake-use.txt","ad-remake-body.txt").contains(name))throw Store.bad("未知提示词资源");
         try(var in=new org.springframework.core.io.ClassPathResource("prompts/"+name).getInputStream()){return new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}catch(java.io.IOException e){throw new IllegalStateException("提示词资源缺失",e);}
