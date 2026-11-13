@@ -1,0 +1,26 @@
+{
+  "source": "manjupingtai2/backend/app/prompts/zh/ad_remake_write_prompt.py",
+  "shared": [
+    "ad_prompt.PRODUCT_FIDELITY_RULE",
+    "ad_prompt.BGM_WRITE_RULE",
+    "ad_remake_prompt.AD_REMAKE_BRAND_LAW"
+  ],
+  "extraction": "AST static string concatenation; no source module execution",
+  "prompts": [
+    {
+      "file": "ad-remake-body.txt",
+      "sha256": "e1e439494f3ab8854c809c102d88bdf78ac4d2d79729049dae0775ef45d721cb",
+      "characters": 14718
+    },
+    {
+      "file": "ad-remake-copy.txt",
+      "sha256": "a860f75f9610cafb1df1a21978f333f7033ded0478b736eb6f6d49822346f129",
+      "characters": 1984
+    },
+    {
+      "file": "ad-remake-use.txt",
+      "sha256": "02eb2d6bd7f055e6a88e6f067f01d1cf39a230eaabcd986cf52b0e35df75a96a",
+      "characters": 1746
+    }
+  ]
+}

@@ -14,8 +14,10 @@ import static com.shangzhen.workbench.Models.*;
 @Component
 public class JobWorker {
     private final Store s; private final MediaService media; private final VideoApiClient video; private final String ffmpeg;
+    private final ProductAnalysisService images;
+    private final OssReferenceService oss;
     private volatile boolean ready;
-    public JobWorker(Store s,MediaService media,VideoApiClient video,@Value("${app.ffmpeg}") String ffmpeg) {this.s=s;this.media=media;this.video=video;this.ffmpeg=ffmpeg;}
+    public JobWorker(Store s,MediaService media,VideoApiClient video,ProductAnalysisService images,OssReferenceService oss,@Value("${app.ffmpeg}") String ffmpeg) {this.s=s;this.media=media;this.video=video;this.images=images;this.oss=oss;this.ffmpeg=ffmpeg;}
     @EventListener(ApplicationReadyEvent.class) public void recover() {
         s.db.update("UPDATE jobs SET status='FAILED',message='服务重启中断了本地制作，请重新提交',updated_at=? WHERE status='RUNNING' AND provider<>'VIDEO_API'",Store.now());
         s.db.update("UPDATE jobs SET status='BLOCKED',message='服务重启时供应商任务编号尚未保存，状态未知；请先核对供应商控制台，不会自动重发',updated_at=? WHERE status='RUNNING' AND provider='VIDEO_API' AND external_task_id IS NULL",Store.now());
@@ -33,7 +35,9 @@ public class JobWorker {
             s.db.update("UPDATE jobs SET status='REVIEW',progress=100,message='本地粗剪已完成，画面来自上传素材，并非 AI 生成',output_name=?,updated_at=? WHERE id=?",id+".mp4",Store.now(),id);
         } catch(Exception e) {
             if(task.provider().equals("VIDEO_API")) {
-                if(task.externalTaskId().isBlank()) s.db.update("UPDATE jobs SET status='BLOCKED',message='供应商提交结果不确定；请核对供应商控制台后再决定是否重试，系统不会自动重复提交',updated_at=? WHERE id=?",Store.now(),id);
+                if(task.externalTaskId().isBlank() && e instanceof org.springframework.web.client.RestClientResponseException response && response.getStatusCode().is4xxClientError())
+                    s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?","供应商明确拒绝了请求（HTTP "+response.getStatusCode().value()+"）；未生成视频，请核对图片链接和请求参数",Store.now(),id);
+                else if(task.externalTaskId().isBlank()) s.db.update("UPDATE jobs SET status='BLOCKED',message='供应商提交结果不确定；请核对供应商控制台后再决定是否重试，系统不会自动重复提交',updated_at=? WHERE id=?",Store.now(),id);
                 else s.db.update("UPDATE jobs SET message='暂时无法查询供应商任务状态；保留原任务编号并继续查询，不会重新提交',updated_at=? WHERE id=?",Store.now(),id);
                 return;
             }
@@ -45,10 +49,14 @@ public class JobWorker {
         String externalId=task.externalTaskId();
         if(externalId.isBlank()) {
             String prompt=videoPrompt(p);
-            Shot firstReference=p.shots().stream().filter(shot->shot.assetId()!=null&&!shot.assetId().isBlank()).findFirst().orElse(null);
-            Asset reference=firstReference==null?null:s.asset(p.clientId(),firstReference.assetId());
-            Path referencePath=reference==null?null:media.assetPath(p.clientId(),reference.id());
-            externalId=video.submit(prompt,p.duration(),referencePath,reference==null?null:reference.mime(),reference==null?null:reference.name());
+            List<String> references=new ArrayList<>();
+            try {
+                List<String> ids=referenceIds(p);
+                if(ids.isEmpty()||ids.size()>30)throw Store.bad("需要1至30张商品参考图");
+                long total=0;
+                for(String id:ids){Asset a=s.asset(p.clientId(),id);if(!a.mime().startsWith("image/"))throw Store.bad("仅支持图片参考，请重新选择商品图片");byte[] bytes=images.readImage(media.assetPath(p.clientId(),id));total+=bytes.length;if(total>20*1024*1024)throw Store.bad("商品参考图总量超过20MB，请减少图片");references.add(oss.publish(p.clientId(),bytes));}
+            }catch(Exception e){String message=e instanceof IllegalStateException&&e.getMessage().startsWith("OSS")?e.getMessage():"商品参考图准备失败；请核对图片和OSS配置，未向视频供应商提交";s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?",message,Store.now(),task.id());return;}
+            externalId=video.submit(prompt,p.duration(),references,Objects.toString(p.config().get("videoResolution"),video.defaultResolution()));
             s.db.update("UPDATE jobs SET external_task_id=?,progress=10,message='供应商已受理任务，等待生成；不会重复提交',updated_at=? WHERE id=?",externalId,Store.now(),task.id());
             return;
         }
@@ -61,20 +69,25 @@ public class JobWorker {
             Files.writeString(media.resolve(task.id()+".srt"),subtitles(p),StandardCharsets.UTF_8);
             s.db.update("UPDATE jobs SET status='REVIEW',progress=100,message='Seedance 视频已生成，请人工审片；字幕为独立 SRT',output_name=?,updated_at=? WHERE id=?",task.id()+".mp4",Store.now(),task.id());
         } else if(Set.of("failed","cancelled","canceled").contains(state.status())) {
-            s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?",state.error()==null||state.error().isBlank()?"Seedance 任务失败；请检查供应商控制台": "Seedance 任务失败；请检查供应商控制台中的错误详情",Store.now(),task.id());
+            s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?","视频生成失败；请检查供应商任务详情。系统未降级为纯文字生成",Store.now(),task.id());
         } else {
             s.db.update("UPDATE jobs SET message='供应商返回未知状态；保留任务编号等待核对，不会重新提交',updated_at=? WHERE id=?",Store.now(),task.id());
         }
     }
     private String videoPrompt(Project p) {
+        if(p.config().get("generationPrompt") instanceof String prompt&&!prompt.isBlank())return prompt;
         StringBuilder prompt=new StringBuilder("制作一条电商商品短视频。平台：").append(p.platform()).append("；类目：").append(p.category())
                 .append("；商品：").append(p.name()).append("；已确认事实：").append(p.facts()).append("。不得添加未确认的功效、价格或规格。分镜：");
         for(int i=0;i<p.shots().size();i++) prompt.append(i+1).append(". ").append(p.shots().get(i).visual()).append("；");
-        return prompt.length()>8000?prompt.substring(0,8000):prompt.toString();
+        if(prompt.length()>5000)throw Store.bad("视频提示词超过5000字，请精简");return prompt.toString();
+    }
+    static List<String> referenceIds(Project p){
+        if(p.config().get("productAssetIds") instanceof List<?> ids)return ids.stream().map(Object::toString).distinct().toList();
+        return p.shots().stream().map(Shot::assetId).filter(id->id!=null&&!id.isBlank()).distinct().toList();
     }
     private record Pending(String id,String provider,String externalTaskId,String status) {}
     void render(String id,Project p) throws Exception {
-        Path dir=Files.createTempDirectory(media.root,"render-");
+        Path dir=Files.createTempDirectory(media.resolve("."),"render-");
         try {
             List<String> segments=new ArrayList<>(); int index=0;
             for(Shot shot:p.shots()) {
@@ -96,8 +109,10 @@ public class JobWorker {
     }
     static String subtitles(Project p) {
         StringBuilder out=new StringBuilder();int elapsed=0,index=1;
+        if(p.config().get("confirmedDialogue") instanceof List<?> lines){for(Object raw:lines)if(raw instanceof Map<?,?> line&&line.get("start") instanceof Number start&&line.get("end") instanceof Number end){out.append(index++).append('\n').append(timeMs(start.doubleValue())).append(" --> ").append(timeMs(end.doubleValue())).append('\n').append(Objects.toString(line.get("text"),"").replace("\r","").replace("\n\n","\n")).append("\n\n");}return out.toString();}
         for(Shot shot:p.shots()) {out.append(index++).append('\n').append(time(elapsed)).append(" --> ").append(time(elapsed+shot.duration())).append('\n').append(Objects.toString(shot.narration(),"").replace("\r","").replace("\n\n","\n")).append("\n\n");elapsed+=shot.duration();}return out.toString();
     }
+    static String timeMs(double seconds){long ms=Math.round(seconds*1000);return String.format(Locale.ROOT,"%02d:%02d:%02d,%03d",ms/3600000,ms/60000%60,ms/1000%60,ms%1000);}
     static String time(int seconds) {return String.format("%02d:%02d:%02d,000",seconds/3600,seconds/60%60,seconds%60);}
     private void run(List<String> args,Path dir) throws Exception {
         Process process=new ProcessBuilder(args).redirectErrorStream(true).redirectOutput(dir.resolve("ffmpeg.log").toFile()).start();

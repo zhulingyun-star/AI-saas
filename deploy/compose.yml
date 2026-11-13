@@ -15,6 +15,9 @@ services:
       retries: 20
     restart: unless-stopped
   backend:
+    env_file:
+      - path: ./oss.env
+        required: false
     build:
       context: ..
       dockerfile: deploy/backend.Dockerfile

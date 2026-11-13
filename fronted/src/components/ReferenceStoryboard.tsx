@@ -5,7 +5,7 @@ import { ErrorState, Field, Modal, useAction, useWorkspace } from './UI';
 import { applyReadSuggestion, mergeReadShots, splitReadShot, type ReadShot, type StoryboardReport, type StoryboardState } from '../storyboard';
 import type { ReferenceMark } from '../remake';
 
-export default function ReferenceStoryboard({ assetId, onUse }: { assetId: string; onUse: (marks: ReferenceMark[], duration: number) => void }) {
+export default function ReferenceStoryboard({ assetId, onUse, onCopy }: { assetId: string; onUse: (marks: ReferenceMark[], duration: number) => void; onCopy?: () => void }) {
   const { client } = useWorkspace(), action = useAction();
   const cache = useQueryClient();
   const endpoint = `/clients/${client.id}/assets/${assetId}/storyboard`;
@@ -86,7 +86,7 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
         </>}
       </div>
     </div>
-    {draft && <div className="row between"><span>{draft.shots.length} 个分镜区间 · {draft.dialogue.length} 句台词</span><button disabled={busy || dirty || draft.shots.length > 20} onClick={() => onUse(draft.shots.map(s => ({ time: s.start, visual: [s.action, `机位：${s.camera}`, `衔接：${s.transition}`, `特效：${s.effects}`].join('\n').slice(0, 600), audio: draft.dialogue.filter(l => l.start < s.end && l.end > s.start).map(l => l.text).join('\n').slice(0, 600), adaptation: '' })), draft.duration)}>带入商品改编{draft.shots.length > 20 ? '（先合并至20镜以内）' : ''}</button></div>}
+    {draft && <div className="row between"><span>{draft.shots.length} 个分镜区间 · {draft.dialogue.length} 句台词</span>{onCopy ? <button className="primary" disabled={busy || dirty} onClick={onCopy}>下一步：台词与花字替换</button> : <button disabled={busy || dirty || draft.shots.length > 20} onClick={() => onUse(draft.shots.map(s => ({ time: s.start, visual: [s.action, `机位：${s.camera}`, `衔接：${s.transition}`, `特效：${s.effects}`].join('\n').slice(0, 600), audio: draft.dialogue.filter(l => l.start < s.end && l.end > s.start).map(l => l.text).join('\n').slice(0, 600), adaptation: '' })), draft.duration)}>带入商品改编{draft.shots.length > 20 ? '（先合并至20镜以内）' : ''}</button>}</div>}
     {!!data?.calls?.length && <details><summary>本次调用记录</summary>{data.calls.map((c, i) => <p key={i}>{c.phase} · {c.seconds}秒 · {c.http ? `HTTP ${c.http}` : '响应未知'}</p>)}</details>}
     {confirm && <Modal title={confirm.shotId ? '确认补读镜头' : '确认读取整片'} onClose={() => setConfirm(null)}>
       <p>本次分析可能产生费用。</p>

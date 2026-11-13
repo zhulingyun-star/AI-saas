@@ -46,3 +46,8 @@ app:
     size: ${VIDEO_API_SIZE:720x1280}
     poll-delay: ${VIDEO_API_POLL_DELAY:10000}
   ffmpeg: ${FFMPEG_PATH:ffmpeg}
+  oss:
+    bucket: ${OSS_BUCKET:${XINLIU_OSS_BUCKET:}}
+    endpoint: ${OSS_ENDPOINT:${XINLIU_OSS_ENDPOINT:}}
+    access-key-id: ${OSS_ACCESS_KEY_ID:${XINLIU_OSS_ACCESS_KEY_ID:}}
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET:${XINLIU_OSS_ACCESS_KEY_SECRET:}}

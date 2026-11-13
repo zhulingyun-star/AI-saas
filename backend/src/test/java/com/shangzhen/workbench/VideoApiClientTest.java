@@ -35,7 +35,7 @@ class VideoApiClientTest {
                 requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                 response = "{\"id\":\"video-task-1\",\"status\":\"queued\"}".getBytes(StandardCharsets.UTF_8);
             } else if (path.endsWith("/content")) {
-                response = new byte[]{0, 1, 2, 3};
+                response = new byte[]{0,0,0,12,102,116,121,112,105,115,111,109};
                 exchange.getResponseHeaders().set("Content-Type", "video/mp4");
                 exchange.sendResponseHeaders(200, response.length);
                 exchange.getResponseBody().write(response);
@@ -56,17 +56,23 @@ class VideoApiClientTest {
     @AfterEach void stopServer() { server.stop(0); }
 
     @Test void submitsOncePollsAndDownloadsWithoutExposingCredentials() throws Exception {
-        Path reference = temp.resolve("ref.png");
-        Files.write(reference, new byte[]{1, 2});
-        String id = client.submit("test prompt", 8, reference, "image/png", "ref.png");
+        String reference = "https://example.oss-cn-hangzhou.aliyuncs.com/product.jpg?Expires=123&Signature=test";
+        String id = client.submit("test prompt", 4, java.util.List.of(reference), "480p");
         assertThat(id).isEqualTo("video-task-1");
         assertThat(authorization.get()).isEqualTo("Bearer test-key");
-        assertThat(requestBody.get()).contains("name=\"model\"", "seedance-2.5-m2", "name=\"prompt\"", "test prompt", "name=\"seconds\"", "8", "name=\"size\"", "720x1280", "name=\"input_reference\"", "filename=\"ref.png\"");
+        var payload=new ObjectMapper().readTree(requestBody.get());
+        assertThat(payload.path("model").asText()).isEqualTo("seedance-2.5-m2-480p");assertThat(payload.path("duration").asInt()).isEqualTo(4);assertThat(payload.path("resolution").asText()).isEqualTo("480p");assertThat(payload.path("ratio").asText()).isEqualTo("9:16");assertThat(payload.path("referenceImages").path(0).asText()).isEqualTo(reference);assertThat(payload.has("seconds")).isFalse();assertThat(payload.has("input_reference")).isFalse();
 
         var state = client.status(id);
         assertThat(state.status()).isEqualTo("in_progress");
         assertThat(state.progress()).isEqualTo(42);
-        assertThat(client.download(id)).isEqualTo(new byte[]{0, 1, 2, 3});
+        assertThat(client.download(id)).hasSize(12);
         assertThat(authorization.get()).isEqualTo("Bearer test-key");
+    }
+    @Test void neverFallsBackWhenReferenceOrParametersAreInvalid(){
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",4,java.util.List.of(),"480p")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",3,java.util.List.of("data:image/png;base64,AQI="),"480p")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",4,java.util.List.of("data:image/png;base64,AQI="),"480p")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(requestBody.get()).isNull();
     }
 }

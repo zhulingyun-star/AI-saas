@@ -3,13 +3,10 @@ package com.shangzhen.workbench;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.http.client.MultipartBodyBuilder;
-
-import java.nio.file.Path;
+import java.util.*;
 
 @Component
 public class VideoApiClient {
@@ -36,16 +33,19 @@ public class VideoApiClient {
     public boolean enabled() { return enabled; }
     public String model() { return model; }
 
-    public String submit(String prompt, int seconds, Path reference, String mime, String filename) {
-        MultipartBodyBuilder form = new MultipartBodyBuilder();
-        form.part("model", model);
-        form.part("prompt", prompt);
-        form.part("seconds", String.valueOf(seconds));
-        form.part("size", size);
-        if(reference != null) form.part("input_reference", new FileSystemResource(reference))
-                .filename(filename).contentType(MediaType.parseMediaType(mime));
-        JsonNode response = http.post().uri("/videos").body(form.build()).retrieve().body(JsonNode.class);
-        String id = response == null ? null : text(response, "id");
+    public String defaultResolution(){return size.startsWith("480")?"480p":size.startsWith("1080")?"1080p":"720p";}
+    public String submit(String prompt, int seconds, List<String> references,String resolution) {
+        if(seconds<4||seconds>30)throw Store.bad("视频生成支持4至30秒");
+        if(prompt==null||prompt.isBlank()||prompt.length()>5000)throw Store.bad("视频提示词须为1至5000字");
+        if(!Set.of("480p","720p","1080p").contains(resolution))throw Store.bad("视频清晰度无效");
+        if(references==null||references.isEmpty()||references.size()>30)throw Store.bad("请提供1至30张商品参考图");
+        for(String ref:references){java.net.URI uri;try{uri=java.net.URI.create(ref);}catch(Exception e){throw Store.bad("商品参考图链接无效");}if(!"https".equals(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw Store.bad("视频通道要求HTTPS商品图片链接，不接受Base64");}
+        Map<String,Object> body=new LinkedHashMap<>();body.put("model",model.replaceFirst("-(480p|720p|1080p)$","")+"-"+resolution);
+        body.put("prompt",prompt);body.put("duration",seconds);body.put("ratio","9:16");body.put("resolution",resolution);body.put("referenceImages",references);
+        JsonNode response = http.post().uri("/videos").contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(JsonNode.class);
+        JsonNode root=response==null?null:response.has("data")&&response.path("data").isObject()?response.path("data"):response;
+        String id = root == null ? null : text(root, "id");
+        if((id==null||id.isBlank())&&root!=null)id=text(root,"task_id");
         if (id == null || id.isBlank()) throw new IllegalStateException("视频供应商没有返回任务编号");
         return id;
     }
@@ -53,7 +53,9 @@ public class VideoApiClient {
     public VideoStatus status(String id) {
         JsonNode response = http.get().uri("/videos/{id}", id).retrieve().body(JsonNode.class);
         if (response == null) throw new IllegalStateException("视频供应商返回了空任务状态");
+        if(response.path("data").isObject())response=response.path("data");
         String status = text(response, "status");
+        if("succeeded".equalsIgnoreCase(status))status="completed";
         int progress = response.path("progress").asInt(status != null && status.equalsIgnoreCase("completed") ? 100 : 10);
         String error = response.path("error").isObject() ? text(response.path("error"), "message") : text(response, "error");
         return new VideoStatus(status == null ? "" : status.toLowerCase(), Math.max(0, Math.min(99, progress)), error);
@@ -61,7 +63,7 @@ public class VideoApiClient {
 
     public byte[] download(String id) {
         byte[] content = http.get().uri("/videos/{id}/content", id).retrieve().body(byte[].class);
-        if (content == null || content.length == 0) throw new IllegalStateException("视频供应商返回了空文件");
+        if (content == null || content.length < 12 || !new String(content,4,4,java.nio.charset.StandardCharsets.US_ASCII).equals("ftyp")) throw new IllegalStateException("视频供应商返回的不是MP4文件");
         return content;
     }
 

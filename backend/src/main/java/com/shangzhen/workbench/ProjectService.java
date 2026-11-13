@@ -48,6 +48,12 @@ public class ProjectService {
         List<Job> jobs=new ArrayList<>();
         for(String id:new LinkedHashSet<>(input.projectIds())) {
             Project p=s.project(client,id);
+            if(input.provider().equals("VIDEO_API")&&video.enabled()){
+                if(p.duration()<4||p.duration()>30)throw Store.bad("视频生成时长须为4至30秒");
+                for(String image:JobWorker.referenceIds(p))if(!s.asset(client,image).mime().startsWith("image/"))throw Store.bad("视频参考素材必须是图片");
+                if(JobWorker.referenceIds(p).isEmpty()||JobWorker.referenceIds(p).size()>30)throw Store.bad("请选择1至30张商品参考图");
+                if(p.config().containsKey("remakeDraftId"))RemakeDraftService.verifyProject(s,p);
+            }
             if(!p.factsConfirmed()||p.shots().isEmpty()) throw Store.bad(p.name()+"：请先确认商品事实并完成分镜");
             if(s.db.queryForObject("SELECT COUNT(*) FROM jobs WHERE project_id=? AND status IN ('QUEUED','RUNNING')",Integer.class,id)>0) throw new ResponseStatusException(HttpStatus.CONFLICT,p.name()+"已有制作中的产单");
             if(input.provider().equals("LOCAL")&&p.shots().stream().anyMatch(x->x.assetId()==null||x.assetId().isBlank())) throw Store.bad(p.name()+"：本地粗剪需要为每个镜头选择真实素材");

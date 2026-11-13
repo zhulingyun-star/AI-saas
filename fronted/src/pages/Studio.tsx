@@ -495,7 +495,7 @@ export default function Studio() {
               <div className="provider-options">
                 {[
                   ['LOCAL', '本地素材粗剪', '真实素材 → 竖屏 MP4 + 独立 SRT，无音轨混音'],
-                  ['VIDEO_API', '外部视频生成', system.data?.videoProviderConnected ? `调用 ${system.data.videoModel}；使用首个引用素材，提交后按供应商账户计费` : '视频供应商尚未启用；提交不会调用外部 API'],
+                  ['VIDEO_API', '外部视频生成', system.data?.videoProviderConnected ? '使用商品参考图生成视频，提交后按供应商实际价格计费' : '视频供应商尚未启用；提交不会调用外部 API'],
                 ].map(([value, label, desc]) => (
                   <label key={value} className={provider === value ? 'selected' : ''}>
                     <input
@@ -544,7 +544,7 @@ export default function Studio() {
                   className="primary"
                   disabled={action.busy}
                   onClick={() => {
-                    if (provider === 'VIDEO_API' && system.data?.videoProviderConnected && !window.confirm(`提交后将调用 ${system.data.videoModel}，费用按供应商账户实际价格计收。确认提交？`)) return;
+                    if (provider === 'VIDEO_API' && system.data?.videoProviderConnected && !window.confirm('提交后将生成视频，费用按供应商账户实际价格计收。确认提交？')) return;
                     action.run(async () => {
                       const p = await save();
                       await post(`/clients/${client.id}/jobs`, { projectIds: [p.id], provider });

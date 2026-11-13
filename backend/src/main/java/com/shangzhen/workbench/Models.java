@@ -14,7 +14,7 @@ public final class Models {
                        @Size(max=1000) String narration, String assetId, @Min(0) @Max(3600) int startAt, boolean locked) {}
     public record ProjectInput(@NotBlank @Size(max=150) String name, @Size(max=100) String sku,
         @NotBlank @Size(max=60) String category, @NotBlank @Size(max=40) String platform,
-        @NotBlank @Size(max=60) String format, @Min(5) @Max(60) int duration,
+        @NotBlank @Size(max=60) String format, @Min(4) @Max(60) int duration,
         @NotBlank @Size(max=8000) String facts, boolean factsConfirmed,
         @NotNull @Size(max=20) List<@Valid Shot> shots,
         @NotNull Map<String, Object> config, @Min(0) int revision) {}

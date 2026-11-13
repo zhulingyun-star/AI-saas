@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Header, Field, ErrorState, Loading, Empty, Modal, useAction, useData, useWorkspace } from '../components/UI';
 import ProjectVideoStart from '../components/ProjectVideoStart';
 import ReferenceStoryboard from '../components/ReferenceStoryboard';
+import RemakeCopy from '../components/RemakeCopy';
 import { useCampaignProducts } from '../components/CampaignProductsPanel';
 import { fileUrl, put, request } from '../api';
 import type { Asset, Campaign } from '../types';
@@ -33,6 +34,7 @@ export default function VideoRemake() {
   const [dragActive, setDragActive] = useState(false);
   const [uploadName, setUploadName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
+  const [copyOpen, setCopyOpen] = useState(params.get('stage') === 'copy');
   const dragDepth = useRef(0);
   const uploading = useRef(false);
   const video = useRef<HTMLVideoElement>(null);
@@ -48,7 +50,7 @@ export default function VideoRemake() {
     setDuration(Number(selected.metadata.duration) || 0); setActiveMark(0); setFrame(''); setMediaError('');
   }, [selected]);
   function choose(asset: Asset) {
-    setSourceId(asset.id); setPosition(0); setStep(0); setReady(null); setManualEditor(false);
+    setSourceId(asset.id); setPosition(0); setStep(0); setReady(null); setManualEditor(false); setCopyOpen(false);
     setParams({ reference: asset.id }, { replace: true });
   }
   async function uploadReference(files: File[]) {
@@ -105,12 +107,12 @@ export default function VideoRemake() {
     <Header title="视频二创模式" description={`${campaign.name} · ${campaign.brief || '先拆参考片，再换成自己的商品内容'}`}>
       <Link className="button" to={`/projects/${id}`}>返回项目 / 切换模式</Link>
     </Header>
-    <div className="project-flow"><strong>① 参考视频与结构拆解</strong><span>② 商品与改编确认</span><span>③ 分镜制作</span><span>④ 生成与审片</span></div>
+    <div className="project-flow">{copyOpen ? <><span>① 参考视频与结构拆解</span><strong>② 台词与花字替换</strong></> : <><strong>① 参考视频与结构拆解</strong><span>② 台词与花字替换</span></>}<span>③ 视频提示词</span><span>④ 生成与审片</span></div>
     <p className="hint">原速读片，字幕优先。候选切点需核对；机位、衔接和特效分别编辑，补读建议由你确认采用。</p>
     {action.error && <ErrorState error={new Error(action.error)} />}
     {assets.error && <ErrorState error={assets.error} />}
     {step === 0 ? <>
-      <section className={`panel padded reference-upload${dragActive ? ' is-dragging' : ''}`} aria-label="参考视频上传区域" aria-busy={!!uploadName}
+      {!copyOpen && <section className={`panel padded reference-upload${dragActive ? ' is-dragging' : ''}`} aria-label="参考视频上传区域" aria-busy={!!uploadName}
         onDragEnter={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); dragDepth.current++; if (!action.busy) setDragActive(true); }}
         onDragOver={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); event.dataTransfer.dropEffect = action.busy ? 'none' : 'copy'; }}
         onDragLeave={event => { event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragActive(false); }}
@@ -127,8 +129,8 @@ export default function VideoRemake() {
           <button disabled={action.busy} className={sourceId === asset.id ? 'is-selected' : ''} onClick={() => choose(asset)}>{asset.name}</button>
           <button className="reference-delete" disabled={action.busy} aria-label={`删除参考视频 ${asset.name}`} onClick={() => setDeleteTarget(asset)}>删除</button>
         </div>)}</div>}
-      </section>
-      {selected && <><ReferenceStoryboard key={sourceId} assetId={sourceId} onUse={(next, d) => { setMarks(next); setDuration(d); setActiveMark(0); setManualEditor(true); }} /><button onClick={() => setManualEditor(!manualEditor)}>{manualEditor ? '收起人工改编' : '人工拆解 / 商品改编'}</button></>}
+      </section>}
+      {selected && copyOpen ? <><button onClick={() => { setCopyOpen(false); setParams({ reference: sourceId }, { replace: true }); }}>返回参考分镜</button><RemakeCopy key={sourceId} campaignId={campaign.id} assetId={sourceId} /></> : selected && <><ReferenceStoryboard key={sourceId} assetId={sourceId} onCopy={() => { setCopyOpen(true); setManualEditor(false); setParams({ reference: sourceId, stage: 'copy' }, { replace: true }); }} onUse={(next, d) => { setMarks(next); setDuration(d); setActiveMark(0); setManualEditor(true); }} /><button onClick={() => setManualEditor(!manualEditor)}>{manualEditor ? '收起人工改编' : '人工拆解 / 商品改编'}</button></>}
       {selected && manualEditor && <div className="remake-workbench">
         <section className="panel padded">
           <video key={sourceId} ref={video} src={fileUrl(client.id, sourceId)} controls className="reference-video"

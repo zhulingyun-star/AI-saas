@@ -69,6 +69,7 @@ public class ReferenceStoryboardService {
         // Share the start/edit monitor: a queued analysis must never be deleted underneath its worker.
         reference(client,asset);State r=row(client,asset);
         if(r!=null&&busy(r))throw new ResponseStatusException(HttpStatus.CONFLICT,"参考视频正在分析，请等待结束后再删除");
+        if(s.db.queryForObject("SELECT COUNT(*) FROM remake_drafts WHERE client_id=? AND asset_id=?",Integer.class,client,asset)>0)throw new ResponseStatusException(HttpStatus.CONFLICT,"参考视频已有商品改编稿，不能删除；可以上传新的参考视频");
         String needle="\""+asset+"\"";
         List<String> references=s.db.query("SELECT shots,config FROM projects WHERE client_id=?",(row,n)->row.getString(1)+row.getString(2),client);
         references.addAll(s.db.queryForList("SELECT snapshot FROM jobs WHERE client_id=?",String.class,client));
