@@ -78,7 +78,7 @@ export default function ReferenceStoryboard({ assetId, onUse }: { assetId: strin
     {draft && <div className="row between"><span>{draft.shots.length} 个分镜区间 · {draft.dialogue.length} 句台词</span><button disabled={busy || dirty || draft.shots.length > 20} onClick={() => onUse(draft.shots.map(s => ({ time: s.start, visual: [s.action, `机位：${s.camera}`, `衔接：${s.transition}`, `特效：${s.effects}`].join('\n').slice(0, 600), audio: draft.dialogue.filter(l => l.start < s.end && l.end > s.start).map(l => l.text).join('\n').slice(0, 600), adaptation: '' })), draft.duration)}>带入商品改编{draft.shots.length > 20 ? '（先合并至20镜以内）' : ''}</button></div>}
     {!!data?.calls?.length && <details><summary>本次调用记录</summary>{data.calls.map((c, i) => <p key={i}>{c.phase} · {c.seconds}秒 · {c.http ? `HTTP ${c.http}` : '响应未知'}</p>)}</details>}
     {confirm && <Modal title={confirm.shotId ? '确认补读镜头' : '确认读取整片'} onClose={() => setConfirm(null)}>
-      <p>使用 {data?.model}，可能产生供应商费用。</p>
+      <p>本次分析可能产生费用。</p>
       <p>{confirm.shotId ? `${confirm.slow ? '3倍慢放无声复核' : '原速补读'}，包含前后各约1秒画面；结果仅作为建议。` : '整片原速读取；有无字幕语音时增加一次音频调用；最多自动补读3个短镜头，总计最多5次调用。重新分析会替换已保存的分镜编辑。'}</p>
       <p>遇到超时不会自动重发；供应商是否计费以其账单为准。</p>
       <button className="primary" disabled={busy} onClick={() => void action.run(async () => { await post(endpoint, { revision, confirmed: true, ...confirm }); setConfirm(null); await query.refetch(); })}>确认并开始分析</button>

@@ -4,6 +4,8 @@
 
 参考视频区域支持拖拽单个文件或点击上传，支持MP4/MOV/WebM、最大100MB。上传后自动选中并保存素材；上传期间拦截重复操作，多文件和不支持的格式会提示错误。
 
+文件名旁提供删除按钮，确认后删除参考视频、对应分析/编辑记录及缩略图，并清空当前预览，可重新上传。正在排队/分析或被作品、历史任务引用的视频拒绝删除；此入口不能删除商品素材。分析确认弹窗只展示费用和处理范围，不展示模型名称。
+
 ## 行为
 
 - 使用现有 AI 配置，通过 Gemini 原生 `/v1beta/models/{model}:generateContent` 的 Base64 `inlineData` 发送视频，不依赖 OSS。
@@ -23,6 +25,7 @@ V6迁移新增 `reference_storyboards`，以 `(client_id,asset_id)` 保存任务
 - POST 同路径：`{revision,confirmed:true,shotId?:string,slow?:boolean}`；无shotId为整片，有shotId为补读。
 - PUT 同路径：`{revision,report}`；乐观锁阻止旧版本覆盖，运行中禁止编辑。
 - GET `/thumbnail?at=秒数`：鉴权后生成/缓存该参考片缩略图。
+- DELETE `/api/clients/{client}/assets/{asset}/reference`：鉴权、CSRF及使用状态检查后删除参考素材和分析记录。数据库提交后清理原文件/缩略图；若文件系统清理失败，记录服务端清理日志，已删除素材不再可通过接口访问。
 
 后台单线程任务：QUEUED → RUNNING → COMPLETED/FAILED。服务重启将RUNNING标失败，不自动重复收费；保留已完成结果。短镜补读失败时保留先前成功的整片报告。API验证客户归属、素材类型、时间轴连续性、ID唯一性、字段长度及台词来源。
 

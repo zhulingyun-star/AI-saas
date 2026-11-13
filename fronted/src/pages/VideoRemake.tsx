@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Header, Field, ErrorState, Loading, Empty, useAction, useData, useWorkspace } from '../components/UI';
+import { Header, Field, ErrorState, Loading, Empty, Modal, useAction, useData, useWorkspace } from '../components/UI';
 import ProjectVideoStart from '../components/ProjectVideoStart';
 import ReferenceStoryboard from '../components/ReferenceStoryboard';
 import { useCampaignProducts } from '../components/CampaignProductsPanel';
@@ -32,6 +32,7 @@ export default function VideoRemake() {
   const [manualEditor, setManualEditor] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploadName, setUploadName] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
   const dragDepth = useRef(0);
   const uploading = useRef(false);
   const video = useRef<HTMLVideoElement>(null);
@@ -69,6 +70,19 @@ export default function VideoRemake() {
         await cache.invalidateQueries({ queryKey: [client.id, 'assets'] }); choose(asset);
       }, '参考视频已保存');
     } finally { uploading.current = false; setUploadName(''); }
+  }
+  async function deleteReference() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    await request(`/clients/${client.id}/assets/${target.id}/reference`, { method: 'DELETE' });
+    cache.setQueryData<Asset[]>([client.id, 'assets'], old => old?.filter(a => a.id !== target.id));
+    cache.removeQueries({ queryKey: [client.id, target.id, 'storyboard'] });
+    if (sourceId === target.id) {
+      setSourceId(''); hydrated.current = ''; setMarks([]); setDuration(0); setPosition(0); setFrame('');
+      setReady(null); setStep(0); setManualEditor(false); setActiveMark(0); setMediaError(''); setParams({}, { replace: true });
+    }
+    setDeleteTarget(null);
+    await cache.invalidateQueries({ queryKey: [client.id, 'assets'] });
   }
   const source: RemakeSource = { assetId: sourceId, name: selected?.name ?? '', duration, marks };
   async function saveMarks() {
@@ -109,7 +123,10 @@ export default function VideoRemake() {
           <strong>{uploadName ? `正在上传：${uploadName}` : dragActive ? '松开鼠标，上传参考视频' : '将参考视频拖到这里，或点击选择文件'}</strong>
           <span>MP4 / MOV / WebM · 单个文件不超过 100MB</span>
         </button>
-        {assets.isPending ? <Loading /> : <div className="remake-video-options">{videos.map(asset => <button key={asset.id} disabled={action.busy} className={sourceId === asset.id ? 'is-selected' : ''} onClick={() => choose(asset)}>{asset.name}</button>)}</div>}
+        {assets.isPending ? <Loading /> : <div className="remake-video-options">{videos.map(asset => <div className="reference-video-choice" key={asset.id}>
+          <button disabled={action.busy} className={sourceId === asset.id ? 'is-selected' : ''} onClick={() => choose(asset)}>{asset.name}</button>
+          <button className="reference-delete" disabled={action.busy} aria-label={`删除参考视频 ${asset.name}`} onClick={() => setDeleteTarget(asset)}>删除</button>
+        </div>)}</div>}
       </section>
       {selected && <><ReferenceStoryboard key={sourceId} assetId={sourceId} onUse={(next, d) => { setMarks(next); setDuration(d); setActiveMark(0); setManualEditor(true); }} /><button onClick={() => setManualEditor(!manualEditor)}>{manualEditor ? '收起人工改编' : '人工拆解 / 商品改编'}</button></>}
       {selected && manualEditor && <div className="remake-workbench">
@@ -143,5 +160,10 @@ export default function VideoRemake() {
         </section>
       </div>}
     </> : ready && <><button onClick={()=>setStep(0)}>返回参考视频与拆解</button><p className="hint">参考：{ready.name} · {ready.marks.length} 个镜头。按原片各段占比分配目标时长；原台词不复制，请在分镜页撰写。</p><ProjectVideoStart campaign={campaign} remake={ready}/></>}
+    {deleteTarget && <Modal title="删除参考视频" onClose={() => { if (!action.busy) setDeleteTarget(null); }}>
+      <p>确认删除「{deleteTarget.name}」？对应的分镜分析和编辑记录也会删除，删除后可重新上传。</p>
+      {action.error && <ErrorState error={new Error(action.error)} />}
+      <div className="row"><button disabled={action.busy} onClick={() => setDeleteTarget(null)}>取消</button><button className="primary" disabled={action.busy} onClick={() => void action.run(deleteReference, '参考视频已删除')}>{action.busy ? '正在删除…' : '确认删除'}</button></div>
+    </Modal>}
   </>;
 }

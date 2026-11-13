@@ -56,6 +56,27 @@ public class ReferenceStoryboardService {
         return get(client,asset);
     }
     private static boolean busy(State r){return Set.of("QUEUED","RUNNING").contains(r.status());}
+    public synchronized void deleteReference(String client,String asset,String user){
+        // Share the start/edit monitor: a queued analysis must never be deleted underneath its worker.
+        reference(client,asset);State r=row(client,asset);
+        if(r!=null&&busy(r))throw new ResponseStatusException(HttpStatus.CONFLICT,"参考视频正在分析，请等待结束后再删除");
+        String needle="\""+asset+"\"";
+        List<String> references=s.db.query("SELECT shots,config FROM projects WHERE client_id=?",(row,n)->row.getString(1)+row.getString(2),client);
+        references.addAll(s.db.queryForList("SELECT snapshot FROM jobs WHERE client_id=?",String.class,client));
+        if(references.stream().anyMatch(value->value.contains(needle)))throw new ResponseStatusException(HttpStatus.CONFLICT,"参考视频已被作品或制作任务引用，不能删除；可以直接上传另一条视频");
+        Path original=media.assetPath(client,asset);String name=s.asset(client,asset).name();
+        var tx=new org.springframework.transaction.support.TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(Objects.requireNonNull(s.db.getDataSource())));
+        tx.executeWithoutResult(status->{
+            s.db.update("DELETE FROM reference_storyboards WHERE client_id=? AND asset_id=?",client,asset);
+            if(s.db.update("DELETE FROM assets WHERE client_id=? AND id=? AND kind='REFERENCE'",client,asset)!=1)throw conflict();
+            s.audit(client,user,"删除参考视频",name);
+        });
+        // Commit first. A failed database transaction must not remove an accessible source file.
+        try{
+            Files.deleteIfExists(original);
+            try(var files=Files.newDirectoryStream(media.resolve("."),"ref-"+asset+"-*.jpg")){for(Path file:files)Files.deleteIfExists(file);}
+        }catch(java.io.IOException e){org.slf4j.LoggerFactory.getLogger(getClass()).warn("Reference video removed from database; file cleanup pending for asset {}",asset);}
+    }
     private static ResponseStatusException conflict(){return new ResponseStatusException(HttpStatus.CONFLICT,"分镜已更新或正在分析，请刷新后再操作；本地编辑尚未覆盖");}
     static void validate(Report r){
         if(r==null||!Double.isFinite(r.duration())||r.duration()<=0||r.duration()>120||r.shots()==null||r.shots().isEmpty()||r.shots().size()>40)throw Store.bad("分镜数量或原片时长无效");

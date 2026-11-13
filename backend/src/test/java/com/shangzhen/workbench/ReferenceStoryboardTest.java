@@ -38,7 +38,7 @@ class ReferenceStoryboardTest {
         byte[] bytes=body.getBytes(StandardCharsets.UTF_8);e.sendResponseHeaders(fail?524:200,bytes.length);e.getResponseBody().write(bytes);e.close();});server.start();}catch(Exception e){throw new RuntimeException(e);}}
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("app.ai.base-url",()->"http://127.0.0.1:"+server.getAddress().getPort()+"/v1");}
     @AfterAll static void stop(){server.stop(0);}
-    @Autowired Store s;@Autowired MockMvc mvc;@Autowired MediaService media;@MockitoSpyBean ReferenceStoryboardService service;
+    @Autowired Store s;@Autowired MockMvc mvc;@Autowired MediaService media;@Autowired ProjectService projects;@MockitoSpyBean ReferenceStoryboardService service;
     @Test void nativeVideoPersistenceEditsSuggestionsConflictAndFailure() throws Exception {
         requests.clear();fail=false;String c=Store.id(),a=Store.id();Path file=media.resolve(a+".mp4");Files.write(file,new byte[]{1,2,3,4});
         s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",c,"admin","分镜测试","美妆",Store.now());
@@ -68,6 +68,32 @@ class ReferenceStoryboardTest {
         assertThat(((Report)service.get(c,a).get("report")).shots().get(0).action()).isEqualTo("手动合并");assertThat(requests).hasSize(3);assertThat(service.get(c,a).get("error").toString()).contains("524");
     }
     static Shot shot(String id,double a,double b){return new Shot(id,a,b,"动作","固定","待确认","","","");}
+    @Test void referenceDeletionIsScopedRejectsActiveAndReferencedAssetsAndRemovesFiles() throws Exception {
+        String c=Store.id(),a=Store.id(),image=Store.id();
+        s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",c,"admin","删除参考测试","美妆",Store.now());
+        for(String id:List.of(a,image))s.db.update("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?,?)",id,c,"test",id.equals(a)?"REFERENCE":"PRODUCT","","",id.equals(a)?"video/mp4":"image/png",3,id+".bin","{}",Store.now());
+        Path source=media.resolve(a+".bin"),thumb=media.resolve("ref-"+a+"-100.jpg");Files.write(source,new byte[]{1,2,3});Files.write(thumb,new byte[]{4});
+        String route="/api/clients/"+c+"/assets/"+a+"/reference";
+        mvc.perform(delete(route).with(user("other")).with(csrf())).andExpect(status().isNotFound());
+        mvc.perform(delete(route).with(user("admin"))).andExpect(status().isForbidden());
+        mvc.perform(delete("/api/clients/"+c+"/assets/"+image+"/reference").with(user("admin")).with(csrf())).andExpect(status().isBadRequest());
+        s.db.update("INSERT INTO reference_storyboards(client_id,asset_id,status,updated_at) VALUES(?,?,'QUEUED',?)",c,a,Store.now());
+        mvc.perform(delete(route).with(user("admin")).with(csrf())).andExpect(status().isConflict());
+        assertThat(Files.exists(source)).isTrue();
+        s.db.update("UPDATE reference_storyboards SET status='COMPLETED' WHERE asset_id=?",a);
+        var p=projects.create(c,"admin",new Models.ProjectInput("引用测试","","美妆","抖音","细节演示",10,"已确认事实",true,List.of(),Map.of("referenceLinks",List.of(Map.of("assetId",a))),0));
+        mvc.perform(delete(route).with(user("admin")).with(csrf())).andExpect(status().isConflict());
+        s.db.update("UPDATE projects SET config='{}' WHERE id=?",p.id());
+        String job=Store.id();s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,revision,created_at,updated_at) VALUES(?,?,?,?,'LOCAL','FAILED',0,?,'',0,?,?)",job,c,p.id(),"历史任务",s.write(Map.of("reference",a)),Store.now(),Store.now());
+        mvc.perform(delete(route).with(user("admin")).with(csrf())).andExpect(status().isConflict());
+        s.db.update("DELETE FROM jobs WHERE id=?",job);
+        mvc.perform(delete(route).with(user("admin")).with(csrf())).andExpect(status().isNoContent());
+        assertThat(Files.exists(source)).isFalse();assertThat(Files.exists(thumb)).isFalse();
+        assertThat(s.db.queryForObject("SELECT COUNT(*) FROM reference_storyboards WHERE asset_id=?",Integer.class,a)).isZero();
+        mvc.perform(get("/api/clients/"+c+"/assets/"+a+"/file").with(user("admin"))).andExpect(status().isNotFound());
+        mvc.perform(delete(route).with(user("admin")).with(csrf())).andExpect(status().isNotFound());
+        assertThat(s.asset(c,image).kind()).isEqualTo("PRODUCT");
+    }
     @Test void audioFallbackOnlyFillsGapsAndDoesNotOverwriteSubtitles() throws Exception {
         fail=false;requests.clear();String c=Store.id(),a=Store.id();Path file=media.resolve(a+".mp4");Files.write(file,new byte[]{1,2,3});
         s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",c,"admin","音频补词测试","美妆",Store.now());

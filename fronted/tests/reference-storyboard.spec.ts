@@ -18,6 +18,7 @@ test('merge/split retain independent dialogue and reject stale reread suggestion
 
 test('read → edit → merge → save → refresh → reread suggestion is explicit', async ({ page }, info) => {
   let state: any = { status: 'EMPTY', revision: 0, model: 'test-gemini', enabled: true, error: '', calls: [] };
+  let removed = false, deletionBlocked = true;
   const image = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#ddd"/></svg>';
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()), method = route.request().method(), pathname = url.pathname;
@@ -28,7 +29,11 @@ test('read → edit → merge → save → refresh → reread suggestion is expl
     if (pathname === '/api/system') return json({ aiMode: 'openai' });
     if (pathname.endsWith('/campaigns')) return json([{ id: 'p', name: '读片项目', brief: '', archived: false }]);
     if (pathname.endsWith('/campaigns/p/products')) return json({ revision: 0, products: [{ anchorId: 'prod', assets: [], analysis: {} }] });
-    if (pathname.endsWith('/assets')) return json([{ id: 'ref', name: '参考片.mp4', kind: 'REFERENCE', mime: 'video/mp4', metadata: {} }]);
+    if (pathname.endsWith('/assets')) return json(removed ? [] : [{ id: 'ref', name: '参考片.mp4', kind: 'REFERENCE', mime: 'video/mp4', metadata: {} }]);
+    if (pathname.endsWith('/assets/ref/reference') && method === 'DELETE') {
+      if (deletionBlocked) return route.fulfill({ status: 409, json: { message: '参考视频正在分析，请等待结束后再删除' } });
+      removed = true; return route.fulfill({ status: 204 });
+    }
     if (pathname.endsWith('/storyboard/thumbnail')) return route.fulfill({ contentType: 'image/svg+xml', body: image });
     if (pathname.endsWith('/assets/ref/file')) return route.fulfill({ contentType: 'video/mp4', path: path.resolve('tests/fixtures/remake-test.mp4') });
     if (pathname.endsWith('/storyboard')) {
@@ -46,6 +51,7 @@ test('read → edit → merge → save → refresh → reread suggestion is expl
   await page.goto('/projects/p/remake?reference=ref');
   await page.getByRole('button', { name: 'AI 读取视频', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('最多5次调用');
+  await expect(page.getByRole('dialog')).not.toContainText('test-gemini');
   await page.getByRole('button', { name: '确认并开始分析' }).click();
   await expect(page.getByLabel('构图、主体与动作')).toHaveValue('展示双瓶');
   await page.getByRole('button', { name: '与后一镜合并' }).click();
@@ -71,4 +77,20 @@ test('read → edit → merge → save → refresh → reread suggestion is expl
   expect(state.report.dialogue[0].source).toBe('manual');
   await page.getByRole('button', { name: '画面与镜头', exact: true }).click();
   await page.screenshot({ path: info.outputPath('reference-storyboard.png'), fullPage: true });
+  await page.getByRole('button', { name: '删除参考视频 参考片.mp4', exact: true }).click();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  expect(removed).toBe(false);
+  await page.getByRole('button', { name: '删除参考视频 参考片.mp4', exact: true }).click();
+  await page.getByRole('button', { name: '确认删除', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('参考视频正在分析');
+  expect(removed).toBe(false);
+  deletionBlocked = false;
+  await page.getByRole('button', { name: '确认删除', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '参考片.mp4', exact: true })).toHaveCount(0);
+  await expect(page.locator('video')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/projects\/p\/remake$/);
+  await page.reload();
+  await expect(page.getByRole('button', { name: '上传参考视频', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '参考片.mp4', exact: true })).toHaveCount(0);
 });
