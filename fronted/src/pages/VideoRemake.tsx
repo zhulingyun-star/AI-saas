@@ -22,7 +22,21 @@ export default function VideoRemake() {
   const assets = useData<Asset[]>('assets');
   const campaign = campaigns.data?.find(c => c.id === id);
   const videos = assets.data?.filter(a => a.kind === 'REFERENCE' && a.mime.startsWith('video/')) ?? [];
-  const [sourceId, setSourceId] = useState(params.get('reference') ?? '');
+  const sourceId = params.get('reference') ?? '';
+  const referenceStorageKey = `remake-reference:${client.id}:${id}`;
+  useEffect(() => {
+    if (!assets.data) return;
+    if (sourceId) {
+      if (videos.some(a => a.id === sourceId)) {
+        try { localStorage.setItem(referenceStorageKey, sourceId); } catch { /* Storage may be unavailable. */ }
+      }
+      return;
+    }
+    let remembered = '';
+    try { remembered = localStorage.getItem(referenceStorageKey) ?? ''; } catch { /* Use the only available reference. */ }
+    const restore = videos.find(a => a.id === remembered) ?? (videos.length === 1 ? videos[0] : undefined);
+    if (restore) setParams(previous => { const next = new URLSearchParams(previous); next.set('reference', restore.id); return next; }, { replace: true });
+  }, [assets.data, sourceId, referenceStorageKey, setParams]);
   const [marks, setMarks] = useState<ReferenceMark[]>([]);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
@@ -57,7 +71,8 @@ export default function VideoRemake() {
     setDuration(Number(selected.metadata.duration) || 0); setActiveMark(0); setFrame(''); setMediaError('');
   }, [selected]);
   function choose(asset: Asset) {
-    setSourceId(asset.id); setPosition(0); setStep(0); setReady(null); setManualEditor(false); setReferenceReady(false); setCopyNavigation({ dirty: false, promptReady: false });
+    if (asset.id === sourceId) return;
+    setPosition(0); setStep(0); setReady(null); setManualEditor(false); setReferenceReady(false); setCopyNavigation({ dirty: false, promptReady: false });
     setParams({ reference: asset.id }, { replace: true });
   }
   async function uploadReference(files: File[]) {
@@ -87,7 +102,8 @@ export default function VideoRemake() {
     cache.setQueryData<Asset[]>([client.id, 'assets'], old => old?.filter(a => a.id !== target.id));
     cache.removeQueries({ queryKey: [client.id, target.id, 'storyboard'] });
     if (sourceId === target.id) {
-      setSourceId(''); hydrated.current = ''; setMarks([]); setDuration(0); setPosition(0); setFrame('');
+      try { localStorage.removeItem(referenceStorageKey); } catch { /* Keep deletion available without browser storage. */ }
+      hydrated.current = ''; setMarks([]); setDuration(0); setPosition(0); setFrame('');
       setReady(null); setStep(0); setManualEditor(false); setActiveMark(0); setMediaError(''); setParams({}, { replace: true });
     }
     setDeleteTarget(null);
