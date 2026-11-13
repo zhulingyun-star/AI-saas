@@ -2,6 +2,8 @@
 
 本次接入当前使用的 `fronted/` + Java 后端（本地 8088），未修改 `xinliu/` 的独立工作台。入口：项目 → 视频二创 → 选择或上传参考视频 → AI 读取视频。
 
+参考视频区域支持拖拽单个文件或点击上传，支持MP4/MOV/WebM、最大100MB。上传后自动选中并保存素材；上传期间拦截重复操作，多文件和不支持的格式会提示错误。
+
 ## 行为
 
 - 使用现有 AI 配置，通过 Gemini 原生 `/v1beta/models/{model}:generateContent` 的 Base64 `inlineData` 发送视频，不依赖 OSS。

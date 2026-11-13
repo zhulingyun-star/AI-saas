@@ -30,6 +30,10 @@ export default function VideoRemake() {
   const [ready, setReady] = useState<RemakeSource | null>(null);
   const [mediaError, setMediaError] = useState('');
   const [manualEditor, setManualEditor] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadName, setUploadName] = useState('');
+  const dragDepth = useRef(0);
+  const uploading = useRef(false);
   const video = useRef<HTMLVideoElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const hydrated = useRef('');
@@ -45,6 +49,26 @@ export default function VideoRemake() {
   function choose(asset: Asset) {
     setSourceId(asset.id); setPosition(0); setStep(0); setReady(null); setManualEditor(false);
     setParams({ reference: asset.id }, { replace: true });
+  }
+  async function uploadReference(files: File[]) {
+    if (uploading.current || action.busy || !files.length) return;
+    uploading.current = true;
+    try {
+      await action.run(async () => {
+        if (files.length !== 1) throw new Error('一次上传一条参考视频，请只拖入一个文件');
+        const file = files[0];
+        const mimeByExtension: Record<string, string> = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
+        const mime = mimeByExtension[file.name.split('.').pop()?.toLowerCase() ?? ''];
+        if (!mime) throw new Error('参考视频支持 MP4、MOV 和 WebM 格式');
+        if (!file.size) throw new Error('视频文件为空，请重新选择');
+        if (file.size > 100 * 1024 * 1024) throw new Error('参考视频不能超过 100MB');
+        setUploadName(file.name);
+        const body = new FormData(); body.set('kind', 'REFERENCE');
+        body.set('file', file.type === mime ? file : new File([file], file.name, { type: mime, lastModified: file.lastModified }));
+        const asset = await request<Asset>(`/clients/${client.id}/assets`, { method: 'POST', body });
+        await cache.invalidateQueries({ queryKey: [client.id, 'assets'] }); choose(asset);
+      }, '参考视频已保存');
+    } finally { uploading.current = false; setUploadName(''); }
   }
   const source: RemakeSource = { assetId: sourceId, name: selected?.name ?? '', duration, marks };
   async function saveMarks() {
@@ -72,19 +96,20 @@ export default function VideoRemake() {
     {action.error && <ErrorState error={new Error(action.error)} />}
     {assets.error && <ErrorState error={assets.error} />}
     {step === 0 ? <>
-      <section className="panel padded">
+      <section className={`panel padded reference-upload${dragActive ? ' is-dragging' : ''}`} aria-label="参考视频上传区域" aria-busy={!!uploadName}
+        onDragEnter={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); dragDepth.current++; if (!action.busy) setDragActive(true); }}
+        onDragOver={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); event.dataTransfer.dropEffect = action.busy ? 'none' : 'copy'; }}
+        onDragLeave={event => { event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragActive(false); }}
+        onDrop={event => { event.preventDefault(); dragDepth.current = 0; setDragActive(false); void uploadReference(Array.from(event.dataTransfer.files)); }}>
         <div className="row between"><h2>1. 选择参考视频</h2><button disabled={action.busy} onClick={() => input.current?.click()}>{action.busy ? '处理中…' : '上传参考视频'}</button></div>
-        <input className="visually-hidden" ref={input} type="file" accept="video/mp4,video/webm,video/quicktime" onChange={event => {
-          const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (!file) return;
-          void action.run(async () => {
-            if (file.size > 100 * 1024 * 1024) throw new Error('参考视频不能超过 100MB');
-            const body = new FormData(); body.set('kind', 'REFERENCE'); body.set('file', file);
-            const asset = await request<Asset>(`/clients/${client.id}/assets`, { method: 'POST', body });
-            await cache.invalidateQueries({ queryKey: [client.id, 'assets'] }); choose(asset);
-          }, '参考视频已保存');
+        <input className="visually-hidden" ref={input} type="file" accept=".mp4,.mov,.webm,video/mp4,video/webm,video/quicktime" disabled={action.busy} onChange={event => {
+          const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; void uploadReference(files);
         }} />
-        {assets.isPending ? <Loading /> : <div className="remake-video-options">{videos.map(asset => <button key={asset.id} className={sourceId === asset.id ? 'is-selected' : ''} onClick={() => choose(asset)}>{asset.name}</button>)}</div>}
-        {!videos.length && <p className="muted">先上传你有权使用的参考视频，再查看画面和标记切点。</p>}
+        <button type="button" className="reference-dropzone" disabled={action.busy} onClick={() => input.current?.click()}>
+          <strong>{uploadName ? `正在上传：${uploadName}` : dragActive ? '松开鼠标，上传参考视频' : '将参考视频拖到这里，或点击选择文件'}</strong>
+          <span>MP4 / MOV / WebM · 单个文件不超过 100MB</span>
+        </button>
+        {assets.isPending ? <Loading /> : <div className="remake-video-options">{videos.map(asset => <button key={asset.id} disabled={action.busy} className={sourceId === asset.id ? 'is-selected' : ''} onClick={() => choose(asset)}>{asset.name}</button>)}</div>}
       </section>
       {selected && <><ReferenceStoryboard key={sourceId} assetId={sourceId} onUse={(next, d) => { setMarks(next); setDuration(d); setActiveMark(0); setManualEditor(true); }} /><button onClick={() => setManualEditor(!manualEditor)}>{manualEditor ? '收起人工改编' : '人工拆解 / 商品改编'}</button></>}
       {selected && manualEditor && <div className="remake-workbench">

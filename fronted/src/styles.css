@@ -2610,3 +2610,7 @@ h1 {
 .read-suggestions { background: #fff8ef; padding: 12px; border-radius: 8px; }
 .read-line-times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .read-workbench { grid-template-columns: 1fr; } .read-player { position: static; } .read-player video { max-height: 360px; } .read-field-grid { grid-template-columns: 1fr; } }
+.reference-upload .reference-dropzone { width: 100%; min-height: 116px; margin: 16px 0; padding: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 2px dashed #d6c4b5; border-radius: 8px; background: #fffcf8; color: #6a4936; }
+.reference-upload .reference-dropzone span { font-size: 12px; color: #7d756f; }
+.reference-upload.is-dragging { outline: 2px solid #b95527; background: #fff8ef; }
+.reference-upload.is-dragging .reference-dropzone { border-color: #b95527; background: #fff0df; }
