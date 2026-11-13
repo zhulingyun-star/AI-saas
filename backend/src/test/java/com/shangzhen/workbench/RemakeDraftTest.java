@@ -41,7 +41,7 @@ class RemakeDraftTest {
   mvc.perform(post(path+"/copy").with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"revision\":0,\"duration\":10,\"confirmed\":false}" )).andExpect(status().isBadRequest());
   stubCopy();service.start(c,p,a,g,new RemakeDraftController.Start(0,true,false,10),false);awaitReady();
   Draft d=(Draft)state("draft");assertThat(d.overlaysOn()).isFalse();assertThat(d.overlays().get(0).text()).isEmpty();assertThat(d.lines().get(0).original()).isEqualTo("原片台词");assertThat(d.relation()).isEqualTo("跨品类");
-  assertThatThrownBy(()->service.start(c,p,a,g,new RemakeDraftController.Start(rev(),true,false,10),true)).hasMessageContaining("核对");
+  assertThatThrownBy(()->service.start(c,p,a,g,new RemakeDraftController.Start(rev(),true,false,10),true)).hasMessageContaining("确认替换文案");
   Draft confirmed=new Draft(d.relation(),d.reason(),d.approach(),List.of(new CopyLine("line1",99,100,"伪造原文","这是我们确认的台词")),d.overlays(),false,10,d.notes(),true);
   int revision=rev();service.edit(c,p,a,g,new RemakeDraftController.Edit(revision,confirmed));assertThat(((Draft)state("draft")).lines().get(0).start()).isZero();assertThat(((Draft)state("draft")).lines().get(0).original()).isEqualTo("原片台词");
   assertThatThrownBy(()->service.edit(c,p,a,g,new RemakeDraftController.Edit(revision,confirmed))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
@@ -55,9 +55,24 @@ class RemakeDraftTest {
   assertThat(work.config().get("generationPrompt")).isEqualTo(prompt);assertThat(work.config().get("productAssetIds")).isEqualTo(List.of(g));assertThat(work.config().get("videoResolution")).isEqualTo("480p");verify(video,never()).submit(anyString(),anyInt(),anyList(),anyString());
   assertThat(JobWorker.subtitles(work)).contains("00:00:00,000 --> 00:00:05,000","这是我们确认的台词").doesNotContain("原片台词");
   assertThatThrownBy(()->service.render(c,p,a,g,"admin",new RemakeDraftController.Render(renderRev,true,"480p"))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+  assertThatThrownBy(()->service.render(c,p,a,g,"admin",new RemakeDraftController.Render(rev(),true,"480p"))).hasMessageContaining("已有视频任务");
+  String jobId=((Models.Job)rendered.get("job")).id();s.db.update("UPDATE jobs SET status='FAILED' WHERE id=?",jobId);
+  service.editPrompt(c,p,a,g,new RemakeDraftController.PromptEdit(rev(),"用户修改的第二版提示词"));
+  assertThat(state("prompt")).isEqualTo("用户修改的第二版提示词");
+  var second=(Map<?,?>)service.render(c,p,a,g,"admin",new RemakeDraftController.Render(rev(),true,"480p"));
+  assertThat(service.renders(c,p,a,g)).hasSize(2);assertThat(s.snapshot(s.db.queryForObject("SELECT snapshot FROM jobs WHERE id=?",String.class,jobId)).config().get("generationPrompt")).isEqualTo(prompt);
+  var work2=s.project(c,second.get("projectId").toString());
   s.db.update("UPDATE reference_storyboards SET revision=revision+1 WHERE asset_id=?",a);assertThat(state("stale")).isEqualTo(true);
-  assertThatThrownBy(()->RemakeDraftService.verifyProject(s,work)).hasMessageContaining("参考分镜已变化");
+  assertThatThrownBy(()->RemakeDraftService.verifyProject(s,work2)).hasMessageContaining("参考分镜已变化");
   assertThatThrownBy(()->service.render(c,p,a,g,"admin",new RemakeDraftController.Render(rev(),true,"480p"))).hasMessageContaining("确认文案");
+ }
+ @Test void targetDurationRoundsUpAndRejectsOldDefault() throws Exception {
+  var json=s.json.readTree(s.db.queryForObject("SELECT report_json FROM reference_storyboards WHERE asset_id=?",String.class,a));
+  ((com.fasterxml.jackson.databind.node.ObjectNode)json).put("duration",18.773);
+  s.db.update("UPDATE reference_storyboards SET report_json=? WHERE asset_id=?",json.toString(),a);
+  assertThat(state("targetDuration")).isEqualTo(19);
+  assertThatThrownBy(()->service.start(c,p,a,g,new RemakeDraftController.Start(0,true,false,15),false)).hasMessageContaining("向上取整");
+  stubCopy();service.start(c,p,a,g,new RemakeDraftController.Start(0,true,false,19),false);awaitReady();assertThat(((Draft)state("draft")).duration()).isEqualTo(19);
  }
  @Test void editingInvalidatesPromptAndFailedRegenerationKeepsOldSourcesStale() throws Exception {
   stubCopy();service.start(c,p,a,g,new RemakeDraftController.Start(0,true,false,10),false);awaitReady();

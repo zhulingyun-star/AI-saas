@@ -42,6 +42,7 @@ public class RemakeDraftService {
     }
     private JsonNode tree(String text){try{return s.json.readTree(text);}catch(Exception e){throw Store.bad("改编资料格式无效");}}
     private Draft draft(Row r){try{return s.json.readValue(r.draft(),Draft.class);}catch(Exception e){throw Store.bad("请先生成替换文案");}}
+    private int targetDuration(String c,String a){var state=storyboard.get(c,a);if(!(state.get("report") instanceof ReferenceStoryboardService.Report report))throw Store.bad("请先完成参考片分析");int seconds=(int)Math.ceil(report.duration());if(seconds<4||seconds>30)throw Store.bad("参考视频按整秒取整后须为4至30秒");return seconds;}
     private String source(String c,String p,String a,String g){
         var ref=storyboard.get(c,a);if(!(ref.get("report") instanceof ReferenceStoryboardService.Report r))throw Store.bad("请先完成参考片分析");
         if(Set.of("QUEUED","RUNNING").contains(ref.get("status")))throw Store.bad("参考片正在分析，请等待完成");
@@ -57,13 +58,27 @@ public class RemakeDraftService {
     }
     private boolean sourcesMatch(Row r,String snapshot){try{return snapshot!=null&&tree(snapshot).equals(tree(source(r.client(),r.campaign(),r.asset(),r.anchor())));}catch(Exception e){return false;}}
     private boolean stale(Row r){return !sourcesMatch(r,r.draft()==null?r.source():r.resultSource());}
-    public Map<String,Object> get(String c,String p,String a,String g){access(c,p,a,g);Row r=row(c,p,a,g);Map<String,Object> out=new LinkedHashMap<>();out.put("revision",r==null?0:r.revision());out.put("status",r==null?"EMPTY":r.status());out.put("phase",r==null?"":r.phase());out.put("error",r==null?"":r.error());out.put("stale",r!=null&&stale(r));out.put("enabled",mode.equals("openai")&&!key.isBlank());out.put("videoEnabled",video.enabled());if(r!=null){out.put("id",r.id());if(r.draft()!=null)out.put("draft",draft(r));out.put("prompt",r.prompt());}return out;}
+    public Map<String,Object> get(String c,String p,String a,String g){access(c,p,a,g);Row r=row(c,p,a,g);Map<String,Object> out=new LinkedHashMap<>();out.put("revision",r==null?0:r.revision());out.put("status",r==null?"EMPTY":r.status());out.put("phase",r==null?"":r.phase());out.put("error",r==null?"":r.error());out.put("targetDuration",targetDuration(c,a));out.put("stale",r!=null&&stale(r));out.put("enabled",mode.equals("openai")&&!key.isBlank());out.put("videoEnabled",video.enabled());if(r!=null){out.put("id",r.id());if(r.draft()!=null)out.put("draft",draft(r));out.put("prompt",r.prompt());if(r.resultSource()!=null)out.put("referenceImages",tree(r.resultSource()).path("images"));}return out;}
     private static boolean busy(Row r){return r!=null&&Set.of("QUEUED","RUNNING").contains(r.status());}
+    public synchronized Object editPrompt(String c,String p,String a,String g,RemakeDraftController.PromptEdit body){
+        access(c,p,a,g);Row r=row(c,p,a,g);if(r==null||busy(r)||r.revision()!=body.revision())throw conflict();
+        if(stale(r)||!draft(r).confirmed()||draft(r).duration()!=targetDuration(c,a))throw Store.bad("请先按原片时长确认替换文案");
+        String prompt=body.prompt().trim();if(prompt.isEmpty()||prompt.length()>5000)throw Store.bad("提示词须为1至5000字");
+        s.db.update("UPDATE remake_drafts SET prompt=?,revision=revision+1,status='READY',phase='提示词已手动保存',error='',updated_at=? WHERE id=?",prompt,Store.now(),r.id());return get(c,p,a,g);
+    }
+    public List<Map<String,Object>> renders(String c,String p,String a,String g){
+        access(c,p,a,g);Row r=row(c,p,a,g);if(r==null)return List.of();
+        return s.db.query("SELECT * FROM jobs WHERE client_id=? ORDER BY created_at DESC",(x,n)->{
+            Project snapshot=s.snapshot(x.getString("snapshot"));if(!r.id().equals(snapshot.config().get("remakeDraftId")))return null;
+            Map<String,Object> item=new LinkedHashMap<>();item.put("id",x.getString("id"));item.put("status",x.getString("status"));item.put("progress",x.getInt("progress"));item.put("message",x.getString("message"));item.put("hasOutput",x.getString("output_name")!=null);item.put("createdAt",x.getTimestamp("created_at").toLocalDateTime().toString());item.put("prompt",snapshot.config().get("generationPrompt"));item.put("resolution",snapshot.config().get("videoResolution"));return item;
+        },c).stream().filter(Objects::nonNull).toList();
+    }
     private static ResponseStatusException conflict(){return new ResponseStatusException(HttpStatus.CONFLICT,"内容已更新或任务正在运行，请重新读取后操作");}
     public synchronized Object start(String c,String p,String a,String g,RemakeDraftController.Start body,boolean prompt){
         access(c,p,a,g);Row r=row(c,p,a,g);if(!body.confirmed())throw Store.bad("请确认本次生成费用");if(!mode.equals("openai")||key.isBlank())throw Store.bad("生成服务尚未配置");if(busy(r)||(r==null?0:r.revision())!=body.revision())throw conflict();
+        if(body.duration()!=targetDuration(c,a))throw Store.bad("成片时长必须等于原片时长向上取整的秒数");
         String src=source(c,p,a,g);
-        if(prompt&&(r==null||r.draft()==null||!draft(r).confirmed()||stale(r)))throw Store.bad("请先核对并保存当前商品的替换文案");
+        if(prompt&&(r==null||r.draft()==null||!draft(r).confirmed()||stale(r)||draft(r).duration()!=targetDuration(c,a)))throw Store.bad("请先按原片时长重新生成并确认替换文案");
         String request=s.write(Map.of("kind",prompt?"PROMPT":"COPY","overlays",body.overlays(),"duration",body.duration()));
         if(r==null)s.db.update("INSERT INTO remake_drafts(id,client_id,campaign_id,asset_id,anchor_id,revision,status,phase,source_json,request_json,updated_at) VALUES(?,?,?,?,?,1,'QUEUED','已排队',?,?,?)",Store.id(),c,p,a,g,src,request,Store.now());
         else if(s.db.update("UPDATE remake_drafts SET revision=revision+1,status='QUEUED',phase='已排队',source_json=?,request_json=?,prompt='',error='',updated_at=? WHERE id=? AND revision=?",src,request,Store.now(),r.id(),body.revision())!=1)throw conflict();
@@ -71,7 +86,7 @@ public class RemakeDraftService {
     }
     public synchronized Object edit(String c,String p,String a,String g,RemakeDraftController.Edit body){
         access(c,p,a,g);Row r=row(c,p,a,g);if(r==null||busy(r)||r.revision()!=body.revision())throw conflict();if(stale(r))throw Store.bad("商品或参考片已变化，请重新生成文案");
-        Draft old=draft(r),d=body.draft();validateDraft(d);
+        Draft old=draft(r),d=body.draft();validateDraft(d);if(d.duration()!=targetDuration(c,a)||old.duration()!=d.duration())throw Store.bad("旧稿时长与原片不符，请重新生成替换文案");
         if(!sameLineIds(old,d))throw Store.bad("台词或花字来源已变化，请重新生成");
         List<CopyLine> lines=new ArrayList<>();for(int i=0;i<d.lines().size();i++){CopyLine base=old.lines().get(i),x=d.lines().get(i);lines.add(new CopyLine(base.id(),base.start(),base.end(),base.original(),x.text()));}
         List<Overlay> overlays=new ArrayList<>();for(int i=0;i<d.overlays().size();i++){Overlay base=old.overlays().get(i),x=d.overlays().get(i);overlays.add(new Overlay(base.id(),base.start(),base.end(),base.original(),x.text(),d.overlaysOn()&&x.enabled()));}
@@ -91,7 +106,12 @@ public class RemakeDraftService {
         JsonNode src=tree(r.source());List<Object> parts=new ArrayList<>();parts.add(Map.of("text",prompt));int i=0;long total=0;
         for(JsonNode image:src.path("images")){byte[] bytes=product.readImage(media.assetPath(r.client(),image.path("id").asText()));total+=bytes.length;if(total>20*1024*1024)throw Store.bad("商品图片总量过大");parts.add(Map.of("text","商品图片"+(++i)));parts.add(Map.of("inlineData",Map.of("mimeType","image/jpeg","data",Base64.getEncoder().encodeToString(bytes))));}
         URI base=URI.create(url);HttpRequest req=HttpRequest.newBuilder(URI.create(base.getScheme()+"://"+base.getRawAuthority()+"/v1beta/models/"+model+":generateContent")).timeout(Duration.ofSeconds(300)).header("Authorization","Bearer "+key).header("x-goog-api-key",key).header("Content-Type","application/json").header("User-Agent","AI-saas-remake/1.0").POST(HttpRequest.BodyPublishers.ofString(s.write(Map.of("contents",List.of(Map.of("role","user","parts",parts)),"generationConfig",Map.of("temperature",0.2,"maxOutputTokens",6500))))).build();
-        var response=http.send(req,HttpResponse.BodyHandlers.ofString());if(response.statusCode()!=200)throw new IllegalStateException("生成服务返回HTTP "+response.statusCode()+"，未自动重发");
+        long begin=System.nanoTime();HttpResponse<String> response;
+        try{response=http.send(req,HttpResponse.BodyHandlers.ofString());}
+        catch(java.net.http.HttpTimeoutException e){throw new IllegalStateException("生成服务等待超过300秒，当前步骤超时；旧文案保留",e);}
+        catch(java.io.IOException e){throw new IllegalStateException("生成服务连接中断，未拿到完整响应；旧文案保留",e);}
+        org.slf4j.LoggerFactory.getLogger(getClass()).info("Remake request draft={} status={} seconds={}",r.id(),response.statusCode(),(System.nanoTime()-begin)/1_000_000_000L);
+        if(response.statusCode()!=200)throw new IllegalStateException("生成服务返回HTTP "+response.statusCode()+"，未自动重发");
         JsonNode result=tree(response.body()).path("candidates").path(0);if(!result.path("finishReason").asText().equals("STOP"))throw new IllegalStateException("生成内容被截断，未自动重发");StringBuilder content=new StringBuilder();for(JsonNode part:result.path("content").path("parts"))if(!part.path("thought").asBoolean())content.append(part.path("text").asText());return content.toString().trim();
     }
     JsonNode ask(Row r,String prompt) throws Exception {String content=reply(r,prompt);int a=content.indexOf('{'),b=content.lastIndexOf('}');if(a<0||b<a)throw new IllegalStateException("生成内容格式无效");return tree(content.substring(a,b+1));}
@@ -176,6 +196,9 @@ public class RemakeDraftService {
     }catch(Exception e){if(e instanceof InterruptedException)Thread.currentThread().interrupt();String msg=e instanceof IllegalStateException?str(e.getMessage()):e instanceof ResponseStatusException x?x.getReason():"生成失败：网络或返回内容异常";if(msg==null)msg="生成失败";s.db.update("UPDATE remake_drafts SET status='FAILED',phase='生成未完成',error=?,revision=revision+1,updated_at=? WHERE id=?",msg.substring(0,Math.min(350,msg.length()))+"；未自动重发",Store.now(),r.id());}}
     @Transactional public synchronized Object render(String c,String p,String a,String g,String user,RemakeDraftController.Render body){
         access(c,p,a,g);Row r=row(c,p,a,g);if(r==null||busy(r)||r.revision()!=body.revision())throw conflict();if(!body.confirmed())throw Store.bad("请确认视频生成费用");if(!video.enabled())throw Store.bad("视频服务尚未启用");if(stale(r)||r.prompt().isBlank()||!draft(r).confirmed())throw Store.bad("请先确认文案并生成当前视频提示词");
+        if(draft(r).duration()!=targetDuration(c,a))throw Store.bad("旧稿时长与原片不符，请重新生成替换文案");
+        s.db.queryForObject("SELECT id FROM clients WHERE id=? FOR UPDATE",String.class,c);
+        if(renders(c,p,a,g).stream().anyMatch(x->Set.of("QUEUED","RUNNING","BLOCKED").contains(x.get("status"))))throw new ResponseStatusException(HttpStatus.CONFLICT,"已有视频任务处理中或结果未知，请先核对该任务再生成");
         if(!Set.of("480p","720p","1080p").contains(body.resolution()))throw Store.bad("清晰度无效");
         if(!oss.enabled())throw Store.bad("请先配置OSS商品图片存储，再提交视频生成");
         JsonNode src=tree(r.source());List<String> imageIds=new ArrayList<>();for(JsonNode image:src.path("images"))imageIds.add(image.path("id").asText());

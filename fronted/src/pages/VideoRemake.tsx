@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Header, Field, ErrorState, Loading, Empty, Modal, useAction, useData, useWorkspace } from '../components/UI';
 import ProjectVideoStart from '../components/ProjectVideoStart';
 import ReferenceStoryboard from '../components/ReferenceStoryboard';
@@ -9,6 +9,7 @@ import { useCampaignProducts } from '../components/CampaignProductsPanel';
 import { fileUrl, put, request } from '../api';
 import type { Asset, Campaign } from '../types';
 import { validateRemake, type ReferenceMark, type RemakeSource } from '../remake';
+import type { StoryboardState } from '../storyboard';
 
 export default function VideoRemake() {
   const { id } = useParams();
@@ -34,7 +35,13 @@ export default function VideoRemake() {
   const [dragActive, setDragActive] = useState(false);
   const [uploadName, setUploadName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
-  const [copyOpen, setCopyOpen] = useState(params.get('stage') === 'copy');
+  const stageParam = params.get('stage');
+  const copyStage: 'copy' | 'prompt' = stageParam === 'prompt' ? 'prompt' : 'copy';
+  const copyOpen = stageParam === 'copy' || stageParam === 'prompt';
+  const [referenceReady, setReferenceReady] = useState(false);
+  const [copyNavigation, setCopyNavigation] = useState({ dirty: false, promptReady: false });
+  const readState = useQuery<StoryboardState>({ queryKey: [client.id, sourceId, 'storyboard'], queryFn: () => request(`/clients/${client.id}/assets/${sourceId}/storyboard`), enabled: !!sourceId });
+  function goToStage(next: 'reference' | 'copy' | 'prompt') { setManualEditor(false); setStep(0); setParams({ reference: sourceId, ...(next === 'reference' ? {} : { stage: next }) }, { replace: true }); window.scrollTo({ top: 0 }); }
   const dragDepth = useRef(0);
   const uploading = useRef(false);
   const video = useRef<HTMLVideoElement>(null);
@@ -50,7 +57,7 @@ export default function VideoRemake() {
     setDuration(Number(selected.metadata.duration) || 0); setActiveMark(0); setFrame(''); setMediaError('');
   }, [selected]);
   function choose(asset: Asset) {
-    setSourceId(asset.id); setPosition(0); setStep(0); setReady(null); setManualEditor(false); setCopyOpen(false);
+    setSourceId(asset.id); setPosition(0); setStep(0); setReady(null); setManualEditor(false); setReferenceReady(false); setCopyNavigation({ dirty: false, promptReady: false });
     setParams({ reference: asset.id }, { replace: true });
   }
   async function uploadReference(files: File[]) {
@@ -107,7 +114,12 @@ export default function VideoRemake() {
     <Header title="视频二创模式" description={`${campaign.name} · ${campaign.brief || '先拆参考片，再换成自己的商品内容'}`}>
       <Link className="button" to={`/projects/${id}`}>返回项目 / 切换模式</Link>
     </Header>
-    <div className="project-flow">{copyOpen ? <><span>① 参考视频与结构拆解</span><strong>② 台词与花字替换</strong></> : <><strong>① 参考视频与结构拆解</strong><span>② 台词与花字替换</span></>}<span>③ 视频提示词</span><span>④ 生成与审片</span></div>
+    <nav className="project-flow remake-step-nav" aria-label="视频二创步骤">
+      <button aria-current={!copyOpen ? 'step' : undefined} disabled={copyNavigation.dirty} onClick={() => goToStage('reference')}>① 参考视频与结构拆解</button>
+      <button aria-current={copyOpen && copyStage === 'copy' ? 'step' : undefined} disabled={!selected || (!copyOpen && !referenceReady) || !readState.data?.report} onClick={() => goToStage('copy')}>② 台词与花字替换</button>
+      <button aria-current={copyOpen && copyStage === 'prompt' ? 'step' : undefined} disabled={!selected || copyNavigation.dirty || !readState.data?.report || (!copyOpen && !referenceReady)} onClick={() => goToStage('prompt')}>③ 视频制作</button>
+      <Link className="button" to={`/queue?campaign=${campaign.id}`} onClick={event => { if (copyNavigation.dirty) event.preventDefault(); }} aria-disabled={copyNavigation.dirty}>④ 生成与审片</Link>
+    </nav>
     <p className="hint">原速读片，字幕优先。候选切点需核对；机位、衔接和特效分别编辑，补读建议由你确认采用。</p>
     {action.error && <ErrorState error={new Error(action.error)} />}
     {assets.error && <ErrorState error={assets.error} />}
@@ -130,7 +142,7 @@ export default function VideoRemake() {
           <button className="reference-delete" disabled={action.busy} aria-label={`删除参考视频 ${asset.name}`} onClick={() => setDeleteTarget(asset)}>删除</button>
         </div>)}</div>}
       </section>}
-      {selected && copyOpen ? <><button onClick={() => { setCopyOpen(false); setParams({ reference: sourceId }, { replace: true }); }}>返回参考分镜</button><RemakeCopy key={sourceId} campaignId={campaign.id} assetId={sourceId} /></> : selected && <><ReferenceStoryboard key={sourceId} assetId={sourceId} onCopy={() => { setCopyOpen(true); setManualEditor(false); setParams({ reference: sourceId, stage: 'copy' }, { replace: true }); }} onUse={(next, d) => { setMarks(next); setDuration(d); setActiveMark(0); setManualEditor(true); }} /><button onClick={() => setManualEditor(!manualEditor)}>{manualEditor ? '收起人工改编' : '人工拆解 / 商品改编'}</button></>}
+      {selected && copyOpen ? <><RemakeCopy key={sourceId} campaignId={campaign.id} assetId={sourceId} stage={copyStage} onStage={goToStage} onReference={() => goToStage('reference')} onNavigation={setCopyNavigation} /></> : selected && <><ReferenceStoryboard key={sourceId} assetId={sourceId} onReady={setReferenceReady} onCopy={() => goToStage('copy')} onUse={(next, d) => { setMarks(next); setDuration(d); setActiveMark(0); setManualEditor(true); }} /><button onClick={() => setManualEditor(!manualEditor)}>{manualEditor ? '收起人工改编' : '人工拆解 / 商品改编'}</button></>}
       {selected && manualEditor && <div className="remake-workbench">
         <section className="panel padded">
           <video key={sourceId} ref={video} src={fileUrl(client.id, sourceId)} controls className="reference-video"

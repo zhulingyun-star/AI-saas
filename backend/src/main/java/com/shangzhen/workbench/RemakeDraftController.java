@@ -13,9 +13,12 @@ public class RemakeDraftController {
     public record Start(@Min(0) int revision,boolean confirmed,boolean overlays,@Min(4) @Max(30) int duration) {}
     public record Edit(@Min(0) int revision,@NotNull RemakeDraftService.Draft draft) {}
     public record Render(@Min(0) int revision,boolean confirmed,@NotNull String resolution) {}
+    public record PromptEdit(@Min(0) int revision,@NotBlank @Size(max=5000) String prompt) {}
     @GetMapping Object get(Principal u,@PathVariable String client,@PathVariable String campaign,@PathVariable String asset,@PathVariable String anchor){s.access(client,u.getName());return service.get(client,campaign,asset,anchor);}
     @PostMapping("/copy") Object copy(Principal u,@PathVariable String client,@PathVariable String campaign,@PathVariable String asset,@PathVariable String anchor,@Valid @RequestBody Start body){s.access(client,u.getName());return service.start(client,campaign,asset,anchor,body,false);}
     @PostMapping("/prompt") Object prompt(Principal u,@PathVariable String client,@PathVariable String campaign,@PathVariable String asset,@PathVariable String anchor,@Valid @RequestBody Start body){s.access(client,u.getName());return service.start(client,campaign,asset,anchor,body,true);}
     @PutMapping Object edit(Principal u,@PathVariable String client,@PathVariable String campaign,@PathVariable String asset,@PathVariable String anchor,@Valid @RequestBody Edit body){s.access(client,u.getName());return service.edit(client,campaign,asset,anchor,body);}
+    @PutMapping("/prompt") Object editPrompt(Principal u,@PathVariable String client,@PathVariable String campaign,@PathVariable String asset,@PathVariable String anchor,@Valid @RequestBody PromptEdit body){s.access(client,u.getName());return service.editPrompt(client,campaign,asset,anchor,body);}
+    @GetMapping("/renders") Object renders(Principal u,@PathVariable String client,@PathVariable String campaign,@PathVariable String asset,@PathVariable String anchor){s.access(client,u.getName());return service.renders(client,campaign,asset,anchor);}
     @PostMapping("/render") Object render(Principal u,@PathVariable String client,@PathVariable String campaign,@PathVariable String asset,@PathVariable String anchor,@Valid @RequestBody Render body){s.access(client,u.getName());return service.render(client,campaign,asset,anchor,u.getName(),body);}
 }

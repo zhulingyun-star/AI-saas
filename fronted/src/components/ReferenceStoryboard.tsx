@@ -5,7 +5,7 @@ import { ErrorState, Field, Modal, useAction, useWorkspace } from './UI';
 import { applyReadSuggestion, mergeReadShots, splitReadShot, type ReadShot, type StoryboardReport, type StoryboardState } from '../storyboard';
 import type { ReferenceMark } from '../remake';
 
-export default function ReferenceStoryboard({ assetId, onUse, onCopy }: { assetId: string; onUse: (marks: ReferenceMark[], duration: number) => void; onCopy?: () => void }) {
+export default function ReferenceStoryboard({ assetId, onUse, onCopy, onReady }: { assetId: string; onUse: (marks: ReferenceMark[], duration: number) => void; onCopy?: () => void; onReady?: (ready: boolean) => void }) {
   const { client } = useWorkspace(), action = useAction();
   const cache = useQueryClient();
   const endpoint = `/clients/${client.id}/assets/${assetId}/storyboard`;
@@ -18,6 +18,7 @@ export default function ReferenceStoryboard({ assetId, onUse, onCopy }: { assetI
   const hydrated = useRef<StoryboardState | null>(null);
   const [clock, setClock] = useState(Date.now());
   const data = query.data, running = ['QUEUED', 'RUNNING'].includes(data?.status ?? ''), busy = action.busy || running;
+  useEffect(() => { onReady?.(!!data?.report && !running && !dirty); }, [data?.report, running, dirty, onReady]);
   useEffect(() => {
     if (data && !dirty && (hydrated.current !== data || revision === -1)) { hydrated.current = data; setDraft(data.report ? structuredClone(data.report) : null); setRevision(data.revision); setSelected(i => Math.max(0, Math.min(i, (data.report?.shots.length ?? 1) - 1))); }
   }, [data, dirty, revision]);
@@ -35,9 +36,10 @@ export default function ReferenceStoryboard({ assetId, onUse, onCopy }: { assetI
   }
   function seek(at: number) { if (video.current) video.current.currentTime = at; }
   return <section className="reference-storyboard panel padded">
-    <div className="row between"><h2>参考片分镜</h2><div className="row">
+    <div className="row between reference-top-actions"><h2>参考片分镜</h2><div className="row">
       <button disabled={busy || dirty || !data?.enabled} onClick={() => setConfirm({ slow: false })}>{running ? '正在分析…' : draft ? '重新分析整片' : 'AI 读取视频'}</button>
       {draft && <button className="primary" disabled={busy || !dirty} onClick={() => void action.run(save, '分镜已保存')}>保存分镜</button>}
+      {onCopy && draft && <button className="primary" disabled={busy || dirty} onClick={onCopy}>下一步：台词与花字替换</button>}
     </div></div>
     {query.error && <ErrorState error={query.error} retry={() => void query.refetch()} />}
     {action.error && <ErrorState error={new Error(action.error)} />}
@@ -86,7 +88,7 @@ export default function ReferenceStoryboard({ assetId, onUse, onCopy }: { assetI
         </>}
       </div>
     </div>
-    {draft && <div className="row between"><span>{draft.shots.length} 个分镜区间 · {draft.dialogue.length} 句台词</span>{onCopy ? <button className="primary" disabled={busy || dirty} onClick={onCopy}>下一步：台词与花字替换</button> : <button disabled={busy || dirty || draft.shots.length > 20} onClick={() => onUse(draft.shots.map(s => ({ time: s.start, visual: [s.action, `机位：${s.camera}`, `衔接：${s.transition}`, `特效：${s.effects}`].join('\n').slice(0, 600), audio: draft.dialogue.filter(l => l.start < s.end && l.end > s.start).map(l => l.text).join('\n').slice(0, 600), adaptation: '' })), draft.duration)}>带入商品改编{draft.shots.length > 20 ? '（先合并至20镜以内）' : ''}</button>}</div>}
+    {draft && <div className="row between"><span>{draft.shots.length} 个分镜区间 · {draft.dialogue.length} 句台词</span>{!onCopy && <button disabled={busy || dirty || draft.shots.length > 20} onClick={() => onUse(draft.shots.map(s => ({ time: s.start, visual: [s.action, `机位：${s.camera}`, `衔接：${s.transition}`, `特效：${s.effects}`].join('\n').slice(0, 600), audio: draft.dialogue.filter(l => l.start < s.end && l.end > s.start).map(l => l.text).join('\n').slice(0, 600), adaptation: '' })), draft.duration)}>带入商品改编{draft.shots.length > 20 ? '（先合并至20镜以内）' : ''}</button>}</div>}
     {!!data?.calls?.length && <details><summary>本次调用记录</summary>{data.calls.map((c, i) => <p key={i}>{c.phase} · {c.seconds}秒 · {c.http ? `HTTP ${c.http}` : '响应未知'}</p>)}</details>}
     {confirm && <Modal title={confirm.shotId ? '确认补读镜头' : '确认读取整片'} onClose={() => setConfirm(null)}>
       <p>本次分析可能产生费用。</p>
