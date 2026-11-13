@@ -28,8 +28,9 @@ import Batch from './pages/Batch';
 import Presets from './pages/Presets';
 import Analytics from './pages/Analytics';
 import Reference from './pages/Reference';
+import VideoRemake from './pages/VideoRemake';
 const links = [
-  ['/', '项目与制作', LayoutDashboard],
+  ['/', '项目管理', LayoutDashboard],
   ['/content', '内容制作', Clapperboard],
   ['/assets', '资源中心', FolderOpen],
   ['/presets', '客户知识', SlidersHorizontal],
@@ -217,6 +218,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Campaigns />} />
               <Route path="/projects/:id" element={<CampaignDetail />} />
+              <Route path="/projects/:id/remake" element={<VideoRemake />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/content" element={<ContentHome />} />
               <Route path="/gallery" element={<Gallery />} />

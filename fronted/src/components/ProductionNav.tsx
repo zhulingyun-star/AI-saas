@@ -6,6 +6,7 @@ export function ProductionNav() {
         ['/', '项目总览'],
         ['/tasks', '我的待办'],
         ['/queue', '生成任务'],
+        ['/review', '审片交付'],
         ['/content', '快捷制作'],
         ['/gallery', '样片广场'],
       ].map(([path, label]) => (

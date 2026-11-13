@@ -51,7 +51,7 @@ export default function Studio() {
   const jobs = useData<Job[]>('jobs', true);
   const system = useQuery({
     queryKey: ['system'],
-    queryFn: () => request<{ aiMode: string }>('/system'),
+    queryFn: () => request<{ aiMode: string; videoProviderConnected: boolean; videoModel: string }>('/system'),
   });
   useEffect(() => {
     if (data.data && hydrated.current !== data.data.id) {
@@ -94,7 +94,8 @@ export default function Studio() {
       form.shots.map((s, i) => (i === index ? { ...s, ...changes } : s)),
     );
   const visual =
-    assets.data?.filter((a) => a.mime.startsWith('image/') || a.mime.startsWith('video/')) ?? [];
+    assets.data?.filter((a) => (a.mime.startsWith('image/') || a.mime.startsWith('video/')) &&
+      (!Array.isArray(form.config.productAssetIds) || form.config.productAssetIds.includes(a.id) || form.shots.some(s => s.assetId === a.id))) ?? [];
   const total = form.shots.reduce((n, s) => n + s.duration, 0);
   const current = form.shots[activeShot] ?? form.shots[0];
   const preview = visual.find((a) => a.id === current?.assetId);
@@ -112,6 +113,7 @@ export default function Studio() {
     setForm(saved);
     cache.setQueryData([client.id, 'project', saved.id], saved);
     await cache.invalidateQueries({ queryKey: [client.id, 'projects'] });
+    await cache.invalidateQueries({ queryKey: [client.id, 'works'] });
     if (!id || copy) navigate('/studio/' + saved.id, { replace: true });
     return saved;
   }
@@ -120,7 +122,11 @@ export default function Studio() {
       `/clients/${client.id}/projects/${p.id}/draft`,
       {},
     );
-    setForm({ ...p, shots: result.shots });
+    const ids = Array.isArray(p.config.productAssetIds) ? (p.config.productAssetIds as string[]).filter(id => visual.some(a => a.id === id)) : [];
+    const shots = result.shots.map((shot, index) => ({ ...shot, assetId: shot.assetId || (ids.length ? ids[index % ids.length] : null) }));
+    const saved = await put<Project>(`/clients/${client.id}/projects/${p.id}`, { ...p, shots });
+    setForm(saved);
+    cache.setQueryData([client.id, 'project', p.id], saved);
     setNotice(result.notice);
   }
   const edit = editing === null ? null : form.shots[editing];
@@ -152,6 +158,7 @@ export default function Studio() {
         )}
       </Header>
       <div className="work-context">
+        {form.config.creationMode === 'VIDEO_REMAKE' && <span className="pill">视频二创模式</span>}
         {campaign ? (
           <Link to={'/projects/' + campaign.id}>{campaign.name}</Link>
         ) : (
@@ -160,6 +167,10 @@ export default function Studio() {
         <Link to="/tasks">分工与接力</Link>
         <Link to="/gallery">样片拍法</Link>
       </div>
+      {form.config.creationMode === 'VIDEO_REMAKE' && <p className="hint">已按参考片结构创建二创分镜。请核对每镜的商品画面、参考素材和新台词；参考片未作为成片素材使用。
+        {campaign && <Link to={`/projects/${campaign.id}/remake`}>制作另一条二创视频</Link>}
+      </p>}
+      {campaign && <div className="project-flow"><span>① {campaign.name}</span><span>② {String(form.config.productName ?? '商品资料')}</span><strong>③ 视频方案与分镜</strong><span>④ 生成视频</span><span>⑤ 审片交付</span></div>}
       <div className="stepper">
         {['商品 / 角色', '方案确认', '出片 / 审片'].map((label, i) => (
           <button key={label} className={stage === i ? 'current' : ''} onClick={() => setStage(i)}>
@@ -201,6 +212,9 @@ export default function Studio() {
           {stage === 0 ? (
             <>
               <h2>商品与卖点</h2>
+              {!!form.config.productAnchorId && <div className="hint">已带入商品：{String(form.config.productName)} · {Array.isArray(form.config.productAssetIds) ? form.config.productAssetIds.length : 0} 份素材。资料按创建时保存，不会随商品库修改而自动覆盖。
+                <Link to={`/assets?product=${form.config.productAnchorId}${campaign ? `&campaign=${campaign.id}` : ''}`}>查看商品分析</Link>
+              </div>}
               <div className="form-grid">
                 <Field label="作品名称">
                   <input
@@ -337,14 +351,15 @@ export default function Studio() {
                   onClick={() =>
                     action.run(async () => {
                       const p = await save();
-                      if (!p.shots.length && system.data?.aiMode === 'local') await draft(p);
+                      if (!p.shots.length) await draft(p);
                       setStage(1);
                     })
                   }
                 >
-                  看本条方案
+                  {form.shots.length ? '查看已有方案' : '生成本条分镜方案'}
                 </button>
               </div>
+              {!form.shots.length && <p className="caption">{system.data?.aiMode === 'openai' ? '生成方案会调用当前文字模型，使用模型额度；不会提交视频生成。' : '按本地规则生成分镜草稿。'}</p>}
             </>
           ) : stage === 1 ? (
             <>
@@ -480,7 +495,7 @@ export default function Studio() {
               <div className="provider-options">
                 {[
                   ['LOCAL', '本地素材粗剪', '真实素材 → 竖屏 MP4 + 独立 SRT，无音轨混音'],
-                  ['VIDEO_API', '外部视频生成', '供应商未配置；只记录待接入，不发请求、不扣费'],
+                  ['VIDEO_API', '外部视频生成', system.data?.videoProviderConnected ? `调用 ${system.data.videoModel}；使用首个引用素材，提交后按供应商账户计费` : '视频供应商尚未启用；提交不会调用外部 API'],
                 ].map(([value, label, desc]) => (
                   <label key={value} className={provider === value ? 'selected' : ''}>
                     <input
@@ -506,7 +521,7 @@ export default function Studio() {
                 </div>
                 <div>
                   <dt>模型费用</dt>
-                  <dd>{provider === 'LOCAL' ? '无模型费用' : '接口与价格尚未配置'}</dd>
+                  <dd>{provider === 'LOCAL' ? '无模型费用' : system.data?.videoProviderConnected ? '按供应商账户实际价格计费' : '视频 API 未启用'}</dd>
                 </div>
               </dl>
               <div className="form-footer">
@@ -528,15 +543,16 @@ export default function Studio() {
                 <button
                   className="primary"
                   disabled={action.busy}
-                  onClick={() =>
+                  onClick={() => {
+                    if (provider === 'VIDEO_API' && system.data?.videoProviderConnected && !window.confirm(`提交后将调用 ${system.data.videoModel}，费用按供应商账户实际价格计收。确认提交？`)) return;
                     action.run(async () => {
                       const p = await save();
                       await post(`/clients/${client.id}/jobs`, { projectIds: [p.id], provider });
                       await cache.invalidateQueries({ queryKey: [client.id] });
-                      navigate('/queue');
+                      navigate(campaign ? '/queue?campaign=' + campaign.id : '/queue');
                       notify('制作任务已创建');
                     })
-                  }
+                  }}
                 >
                   确认并提交 1 条任务
                 </button>
@@ -547,7 +563,7 @@ export default function Studio() {
                   {jobs.data
                     ?.filter((j) => j.projectId === id)
                     .map((j) => (
-                      <Link key={j.id} to={'/review?job=' + j.id}>
+                      <Link key={j.id} to={'/review?job=' + j.id + (campaign ? '&campaign=' + campaign.id : '')}>
                         V{j.revision} · {j.message}
                       </Link>
                     ))}

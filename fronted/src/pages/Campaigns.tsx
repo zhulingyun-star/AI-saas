@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
+import CampaignProductsPanel from '../components/CampaignProductsPanel';
 import {
   Header,
   Field,
@@ -119,6 +120,7 @@ export default function Campaigns() {
   );
 }
 export function CampaignForm({ campaign, onClose }: { campaign?: Campaign; onClose: () => void }) {
+  const navigate = useNavigate();
   const { client, username } = useWorkspace();
   const cache = useQueryClient();
   const action = useAction();
@@ -138,10 +140,11 @@ export function CampaignForm({ campaign, onClose }: { campaign?: Campaign; onClo
               archived: fd.get('archived') === 'on',
               revision: campaign?.revision ?? 0,
             };
-            if (campaign) await put(`/clients/${client.id}/campaigns/${campaign.id}`, body);
-            else await post(`/clients/${client.id}/campaigns`, body);
+            const saved = campaign ? await put<Campaign>(`/clients/${client.id}/campaigns/${campaign.id}`, body)
+              : await post<Campaign>(`/clients/${client.id}/campaigns`, body);
             await cache.invalidateQueries({ queryKey: [client.id, 'campaigns'] });
             onClose();
+            if (!campaign) navigate('/projects/' + saved.id);
           }, '交付项目已保存');
         }}
       >
@@ -167,7 +170,7 @@ export function CampaignForm({ campaign, onClose }: { campaign?: Campaign; onClo
               type="number"
               min={1}
               max={10000}
-              defaultValue={campaign?.targetCount ?? 10}
+              defaultValue={campaign?.targetCount ?? 1}
             />
           </Field>
         </div>
@@ -193,6 +196,8 @@ export function CampaignDetail() {
   const data = useData<Campaign[]>('campaigns', true);
   const campaign = data.data?.find((c) => c.id === id);
   const [editing, setEditing] = useState(false);
+  const [choosingMode, setChoosingMode] = useState(false);
+  const [hasProducts, setHasProducts] = useState(false);
   if (data.isPending) return <Loading />;
   if (data.error) return <ErrorState error={data.error} />;
   if (!campaign) return <Empty title="交付项目不存在" description="请返回项目总览。" />;
@@ -203,16 +208,21 @@ export function CampaignDetail() {
         description={`${campaign.ownerName} · ${campaign.dueDate ?? '未设置截止'} · ${campaign.deliveredCount} / ${campaign.targetCount} 条交付`}
       >
         <button onClick={() => setEditing(true)}>项目设置</button>
-        <Link className="button primary" to={'/studio?campaign=' + campaign.id}>
-          在此项目做视频
-        </Link>
+        <button className="primary" disabled={campaign.archived || !hasProducts} onClick={() => setChoosingMode(true)}>在此项目做视频</button>
         <Link className="button" to="/">
           返回项目总览
         </Link>
       </Header>
       <div className="project-brief">{campaign.brief || '尚未填写项目需求'}</div>
+      <CampaignProductsPanel key={campaign.id} campaignId={campaign.id} archived={campaign.archived} onReady={setHasProducts} />
       <WorkList campaignId={campaign.id} />
       {editing && <CampaignForm campaign={campaign} onClose={() => setEditing(false)} />}
+      {choosingMode && <Modal title="选择视频制作模式" onClose={() => setChoosingMode(false)}>
+        <div className="creation-mode-options">
+          <div className="creation-mode-card is-pending"><h3>剧情模式</h3><p>围绕人物、情节和商品设计原创故事。</p><span className="pill">后续开放</span></div>
+          <Link className="creation-mode-card" to={`/projects/${campaign.id}/remake`}><h3>视频二创模式</h3><p>选择参考视频 → 拆解画面结构 → 替换为当前商品 → 分镜制作。</p><strong>开始视频二创 →</strong></Link>
+        </div>
+      </Modal>}
     </>
   );
 }

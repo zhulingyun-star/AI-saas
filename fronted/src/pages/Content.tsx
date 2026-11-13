@@ -110,6 +110,11 @@ export function ContentHome() {
       </Header>
       <ProductionNav />
       <div className="quick-start">
+        <Link to="/">
+          <h2>从项目开始（推荐）</h2>
+          <p>建立项目 → 选商品 → 制作视频 → 审片交付</p>
+          <ArrowRight size={20} />
+        </Link>
         <Link to="/studio">
           <h2>直接做视频</h2>
           <p>商品资料 → 方案确认 → 出片与审片</p>

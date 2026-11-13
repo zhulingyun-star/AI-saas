@@ -24,6 +24,24 @@ class WorkflowIntegrationTest {
   var body=new Models.ProjectInput("集成测试外套","TEST-001","服饰鞋包","抖音","细节演示",15,"外观与规格已确认",true,List.of(),Map.of(),0);
   String response=mvc.perform(post("/api/clients/"+client+"/projects").with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(body))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();return s.json.readTree(response).get("id").asText();
  }
+ @Test void campaignProductBindingReturnsWholeGroupAndAnalysisAndRejectsCrossClient() throws Exception {
+  String c=Store.id(),campaign=Store.id(),first=Store.id(),second=Store.id(),foreign=Store.id(),group=Store.id();
+  s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",c,"admin","项目绑定测试","服饰",Store.now());
+  s.db.update("INSERT INTO campaigns VALUES(?,?,?,?,?,?,?,?,?,?,?)",campaign,c,"绑定测试","admin",null,1,"",false,0,Store.now(),Store.now());
+  for(String id:List.of(first,second))s.db.update("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?,?)",id,c,"商品图","PRODUCT","SKU","标签","image/png",3,"test.png",s.write(Map.of("productName","鞋子","productGroupId",group)),Store.now());
+  s.db.update("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?,?)",foreign,client,"其他客户图","PRODUCT","","","image/png",3,"test.png","{}",Store.now());
+  s.db.update("INSERT INTO product_analyses(client_id,group_id,anchor_id,brief,status,input_json,result_json,model,updated_at) VALUES(?,?,?,?,'COMPLETED','{}',?,?,?)",c,group,first,"补充说明",s.write(Map.of("summary","已手动编辑的商品分析")),"test",Store.now());
+  String path="/api/clients/"+c+"/campaigns/"+campaign+"/products";
+  mvc.perform(get(path).with(user("admin"))).andExpect(jsonPath("$.products.length()").value(0));
+  mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("anchorIds",List.of(first,second),"revision",0))))
+   .andExpect(status().isOk()).andExpect(jsonPath("$.products.length()").value(1)).andExpect(jsonPath("$.products[0].assets.length()").value(2)).andExpect(jsonPath("$.products[0].analysis.report.summary").value("已手动编辑的商品分析"));
+  mvc.perform(get(path).with(user("admin"))).andExpect(jsonPath("$.products[0].analysis.brief").value("补充说明"));
+  mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("anchorIds",List.of(foreign),"revision",1)))).andExpect(status().isNotFound());
+  mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("anchorIds",List.of(),"revision",0)))).andExpect(status().isConflict());
+  mvc.perform(get(path).with(user("intruder"))).andExpect(status().isNotFound());
+  mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("anchorIds",List.of(),"revision",1)))).andExpect(jsonPath("$.products.length()").value(0));
+  assertThat(s.asset(c,first).metadata().get("productName")).isEqualTo("鞋子");
+ }
  @Test void authenticationCsrfAndSession() throws Exception {
   mvc.perform(get("/api/clients")).andExpect(status().isUnauthorized());
   mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"admin\",\"password\":\"change-me-local\"}")).andExpect(status().isForbidden());
@@ -53,10 +71,50 @@ class WorkflowIntegrationTest {
  }
  @Test void actualUploadIsProtectedAndAvailable() throws Exception {
   var file=new MockMultipartFile("file","商品.png","image/png",new byte[]{(byte)137,80,78,71});
-  var response=mvc.perform(multipart("/api/clients/"+client+"/assets").file(file).param("kind","PRODUCT").with(user("admin")).with(csrf())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();String id=s.json.readTree(response).get("id").asText();
+  var response=mvc.perform(multipart("/api/clients/"+client+"/assets").file(file).param("kind","PRODUCT").param("productName","集成测试商品").param("sku","TEST-001").with(user("admin")).with(csrf())).andExpect(status().isOk()).andExpect(jsonPath("$.metadata.productName").value("集成测试商品")).andReturn().getResponse().getContentAsString();String id=s.json.readTree(response).get("id").asText();
   mvc.perform(get("/api/clients/"+client+"/assets/"+id+"/file").with(user("admin"))).andExpect(status().isOk()).andExpect(content().bytes(file.getBytes()));
   mvc.perform(get("/api/clients/"+client+"/assets/"+id+"/file").with(user("intruder"))).andExpect(status().isNotFound());
   mvc.perform(multipart("/api/clients/"+client+"/assets").file(new MockMultipartFile("file","evil.svg","image/svg+xml","<svg/>".getBytes())).with(user("admin")).with(csrf())).andExpect(status().isBadRequest());
+ }
+ @Test void productGroupPersistsAndEditsAllMembersWithoutMergingOtherProducts() throws Exception {
+  String group=Store.id();List<String> ids=new ArrayList<>();
+  for(int i=0;i<2;i++) {
+   String response=mvc.perform(multipart("/api/clients/"+client+"/assets")
+    .file(new MockMultipartFile("file","photo"+i+".png","image/png",new byte[]{1,2,3}))
+    .param("productName","同名商品").param("productGroupId",group).with(user("admin")).with(csrf()))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.metadata.productGroupId").value(group)).andExpect(jsonPath("$.sku").value(""))
+    .andReturn().getResponse().getContentAsString();ids.add(s.json.readTree(response).get("id").asText());
+  }
+  String other=Store.id();s.db.update("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?,?)",other,client,"other.png","PRODUCT","","","image/png",3,"other.png",s.write(Map.of("productName","同名商品","productGroupId",Store.id())),Store.now());
+  String path="/api/clients/"+client+"/product-groups/"+ids.get(0);
+  mvc.perform(put(path).with(user("intruder")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"productName\":\"越权\",\"sku\":\"X\"}")).andExpect(status().isNotFound());
+  mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"productName\":\"新百伦鞋子\",\"sku\":\"NB-992\"}"))
+   .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+  for(String id:ids) {assertThat(s.asset(client,id).sku()).isEqualTo("NB-992");assertThat(s.asset(client,id).metadata().get("productName")).isEqualTo("新百伦鞋子");}
+  assertThat(s.asset(client,other).sku()).isEmpty();
+  mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"productName\":\"\",\"sku\":\"X\"}")).andExpect(status().isBadRequest());
+  assertThat(s.asset(client,ids.get(0)).sku()).isEqualTo("NB-992");
+ }
+ @Test void productCoverPersistsAndRejectsOtherGroupsOrVideo() throws Exception {
+  String group=Store.id(),first=Store.id(),second=Store.id(),videoId=Store.id(),other=Store.id();
+  for(String id:List.of(first,second,videoId,other)) s.db.update("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?,?)",id,client,"cover-test","PRODUCT","","",id.equals(videoId)?"video/mp4":"image/png",3,"test",s.write(Map.of("productGroupId",id.equals(other)?Store.id():group,"productName","封面测试")),Store.now());
+  String path="/api/clients/"+client+"/product-groups/"+first+"/cover";
+  mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("assetId",second))))
+   .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3));
+  assertThat(s.asset(client,first).metadata().get("coverAssetId")).isEqualTo(second);
+  assertThat(s.asset(client,other).metadata()).doesNotContainKey("coverAssetId");
+  for(String invalid:List.of(other,videoId)) mvc.perform(put(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("assetId",invalid)))).andExpect(status().isBadRequest());
+  mvc.perform(put(path).with(user("intruder")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(Map.of("assetId",first)))).andExpect(status().isNotFound());
+  mvc.perform(put("/api/clients/"+client+"/product-groups/"+first).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"productName\":\"新名称\",\"sku\":\"SKU\"}")).andExpect(status().isOk());
+  assertThat(s.asset(client,first).metadata().get("coverAssetId")).isEqualTo(second);
+ }
+ @Test void legacyProductGroupKeepsTogetherWhenNameAndSkuChange() throws Exception {
+  String name=Store.id(),first=Store.id(),second=Store.id();
+  for(String id:List.of(first,second)) s.db.update("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?,?)",id,client,"legacy.png","PRODUCT","","","image/png",3,"legacy.png",s.write(Map.of("productName",name,"authorization","保留授权")),Store.now());
+  mvc.perform(put("/api/clients/"+client+"/product-groups/"+first).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"productName\":\"更新名称\",\"sku\":\"\"}"))
+   .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+  assertThat(s.asset(client,first).metadata().get("productGroupId")).isNotNull().isEqualTo(s.asset(client,second).metadata().get("productGroupId"));
+  assertThat(s.asset(client,second).metadata().get("authorization")).isEqualTo("保留授权");
  }
  @Test void csvAggregatesWeightedAndInvalidImportRollsBack() throws Exception {
   String c=Store.id();s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",c,"admin","报表测试","服饰",Store.now());

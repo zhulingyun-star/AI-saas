@@ -10,7 +10,8 @@ import static com.shangzhen.workbench.Models.*;
 @Service
 public class ProjectService {
     private final Store s;
-    public ProjectService(Store s) {this.s=s;}
+    private final VideoApiClient video;
+    public ProjectService(Store s, VideoApiClient video) {this.s=s;this.video=video;}
     void validate(String client,ProjectInput p) {
         if(p.shots().size()>0 && p.shots().stream().mapToInt(Shot::duration).sum()!=p.duration()) throw Store.bad("镜头总时长必须等于成片时长");
         if(s.write(p.config()).length()>10000) throw Store.bad("制作配置过长");
@@ -52,8 +53,10 @@ public class ProjectService {
             if(input.provider().equals("LOCAL")&&p.shots().stream().anyMatch(x->x.assetId()==null||x.assetId().isBlank())) throw Store.bad(p.name()+"：本地粗剪需要为每个镜头选择真实素材");
             String jobId=Store.id(); var now=Store.now();
             int version=s.db.queryForObject("SELECT COALESCE(MAX(revision),0)+1 FROM jobs WHERE project_id=?",Integer.class,id);
-            String status=input.provider().equals("VIDEO_API")?"BLOCKED":"QUEUED";
-            s.db.update("INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",jobId,client,id,p.name(),input.provider(),status,0,s.write(p),status.equals("BLOCKED")?"视频生成供应商尚未接入；未发出请求、未产生费用":"已排队：将使用上传素材进行 FFmpeg 粗剪",null,version,now,now);
+            boolean external=input.provider().equals("VIDEO_API");
+            String status=external&&!video.enabled()?"BLOCKED":"QUEUED";
+            String message=status.equals("BLOCKED")?"视频供应商未配置；未发出请求、未产生费用":external?"已排队：提交后将调用 "+video.model()+"，可能产生供应商费用":"已排队：将使用上传素材进行 FFmpeg 粗剪";
+            s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",jobId,client,id,p.name(),input.provider(),status,0,s.write(p),message,null,version,now,now);
             jobs.add(s.job(client,jobId));
         }
         s.audit(client,user,"提交制作",jobs.size()+" 条产单 / "+input.provider()); return jobs;

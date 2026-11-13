@@ -101,7 +101,9 @@ cd backend
 mvn -s maven-settings.xml spring-boot:run
 ```
 
-Docker 中在 `deploy/.env` 配置相同变量，再重建后端容器。`AI_BASE_URL` 通常填写主机地址，不包含 `/v1/chat/completions`；兼容服务若路由不同，需要调整 `AiService`。密钥只进入后端，不返回浏览器。
+Docker 中在 `deploy/.env` 配置相同变量，再重建后端容器。`AI_BASE_URL` 通常填写 API 主机或 `/v1` 基址，不包含 `/chat/completions`；密钥只进入后端，不返回浏览器。
+
+文本模型通过 `AI_MODE=openai`、`AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 配置。Seedance 视频生成单独通过 `VIDEO_API_ENABLED=true`、`VIDEO_API_BASE_URL`、`VIDEO_API_KEY`、`VIDEO_API_MODEL`、`VIDEO_API_SIZE` 配置。当前实现使用 OpenAI 风格异步视频接口：`POST /videos`（multipart：`model/prompt/seconds/size`，可选首个引用素材 `input_reference`）、`GET /videos/{id}`、`GET /videos/{id}/content`；实际供应商必须支持这组路由和参数。提交视频任务会产生供应商费用，工作台会再次确认；请求超时或任务状态不明时不会自动重发。启用前先核对供应商兼容契约及模型规格/价格。
 
 `AiService` 使用 Spring AI `ChatClient` / `OpenAiChatModel`，以结构化输出生成分镜；启用客户规则、传入已确认商品事实、保留锁定镜头，并校验镜头数量、长度和总时长。生成结果只写入编辑器，人工保存后才更新项目。接口失败不会用本地草稿掩盖失败。
 

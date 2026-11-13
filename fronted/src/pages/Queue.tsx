@@ -16,10 +16,12 @@ import {
   ErrorState,
 } from '../components/UI';
 import { jobUrl, request, post } from '../api';
-import { statusLabel, type Job, type Review, type Project } from '../types';
+import { statusLabel, type Job, type Review, type Project, type Work } from '../types';
 export default function Queue({ reviewOnly = false }: { reviewOnly?: boolean }) {
   const data = useData<Job[]>('jobs', true);
   const [params, setParams] = useSearchParams();
+  const works = useData<Work[]>('works');
+  const campaignId = params.get('campaign');
   const [status, setStatus] = useState('ALL');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Job | null>(null);
@@ -27,6 +29,7 @@ export default function Queue({ reviewOnly = false }: { reviewOnly?: boolean }) 
   const filtered =
     data.data?.filter(
       (j) =>
+        (!campaignId || works.data?.some(w => w.id === j.projectId && w.campaignId === campaignId)) &&
         (!reviewOnly || ['REVIEW', 'CHANGES_REQUESTED', 'DELIVERED'].includes(j.status)) &&
         (status === 'ALL' || j.status === status) &&
         j.name.includes(search),
@@ -45,11 +48,12 @@ export default function Queue({ reviewOnly = false }: { reviewOnly?: boolean }) 
           <RefreshCw size={16} />
           刷新状态
         </button>
-        <Link className="button primary" to="/studio">
-          新建内容
+        <Link className="button primary" to={campaignId ? `/projects/${campaignId}#project-video-start` : '/studio'}>
+          {campaignId ? '在此项目继续制作' : '新建内容'}
         </Link>
       </Header>
       <ProductionNav />
+      {campaignId && <Link className="button" to={`/projects/${campaignId}`}>返回当前项目</Link>}
       <div className="toolbar">
         <div className="search">
           <Search size={17} />
@@ -118,7 +122,7 @@ export default function Queue({ reviewOnly = false }: { reviewOnly?: boolean }) 
                       V{j.revision} · {j.id.slice(0, 8)}
                     </small>
                   </td>
-                  <td>{j.provider === 'LOCAL' ? '本地素材粗剪' : '外部视频 API'}</td>
+                  <td>{j.provider === 'LOCAL' ? '本地素材粗剪' : 'Seedance 视频生成'}</td>
                   <td>
                     <span
                       className={`pill ${j.status === 'DELIVERED' ? 'good' : ['FAILED', 'BLOCKED'].includes(j.status) ? 'warning' : ''}`}

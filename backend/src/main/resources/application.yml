@@ -38,4 +38,11 @@ app:
     base-url: ${AI_BASE_URL:https://api.openai.com}
     api-key: ${AI_API_KEY:}
     model: ${AI_MODEL:gpt-4o-mini}
+  video:
+    enabled: ${VIDEO_API_ENABLED:false}
+    base-url: ${VIDEO_API_BASE_URL:https://api.openai.com/v1}
+    api-key: ${VIDEO_API_KEY:${AI_API_KEY:}}
+    model: ${VIDEO_API_MODEL:seedance-2.5-m2}
+    size: ${VIDEO_API_SIZE:720x1280}
+    poll-delay: ${VIDEO_API_POLL_DELAY:10000}
   ffmpeg: ${FFMPEG_PATH:ffmpeg}

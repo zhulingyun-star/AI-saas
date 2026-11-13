@@ -13,27 +13,66 @@ import static com.shangzhen.workbench.Models.*;
 
 @Component
 public class JobWorker {
-    private final Store s; private final MediaService media; private final String ffmpeg;
+    private final Store s; private final MediaService media; private final VideoApiClient video; private final String ffmpeg;
     private volatile boolean ready;
-    public JobWorker(Store s,MediaService media,@Value("${app.ffmpeg}") String ffmpeg) {this.s=s;this.media=media;this.ffmpeg=ffmpeg;}
+    public JobWorker(Store s,MediaService media,VideoApiClient video,@Value("${app.ffmpeg}") String ffmpeg) {this.s=s;this.media=media;this.video=video;this.ffmpeg=ffmpeg;}
     @EventListener(ApplicationReadyEvent.class) public void recover() {
-        s.db.update("UPDATE jobs SET status='FAILED',message='服务重启中断了制作，请重新提交',updated_at=? WHERE status='RUNNING'",Store.now());
+        s.db.update("UPDATE jobs SET status='FAILED',message='服务重启中断了本地制作，请重新提交',updated_at=? WHERE status='RUNNING' AND provider<>'VIDEO_API'",Store.now());
+        s.db.update("UPDATE jobs SET status='BLOCKED',message='服务重启时供应商任务编号尚未保存，状态未知；请先核对供应商控制台，不会自动重发',updated_at=? WHERE status='RUNNING' AND provider='VIDEO_API' AND external_task_id IS NULL",Store.now());
         ready=true;
     }
     @Scheduled(fixedDelayString="${app.worker-delay:3000}") public void tick() {
         if(!ready) return;
-        var pending=s.db.query("SELECT id FROM jobs WHERE status='QUEUED' ORDER BY created_at LIMIT 1",(r,n)->r.getString(1));
-        if(pending.isEmpty()) return;String id=pending.get(0);
-        if(s.db.update("UPDATE jobs SET status='RUNNING',progress=5,message='正在处理真实素材',updated_at=? WHERE id=? AND status='QUEUED'",Store.now(),id)==0)return;
+        var pending=s.db.query("SELECT id,provider,COALESCE(external_task_id,''),status FROM jobs WHERE status='QUEUED' OR (provider='VIDEO_API' AND status='RUNNING' AND external_task_id IS NOT NULL) ORDER BY CASE WHEN status='QUEUED' THEN 0 ELSE 1 END,created_at LIMIT 1",(r,n)->new Pending(r.getString(1),r.getString(2),r.getString(3),r.getString(4)));
+        if(pending.isEmpty()) return;Pending task=pending.get(0);String id=task.id();
+        if(task.status().equals("QUEUED")&&s.db.update("UPDATE jobs SET status='RUNNING',progress=5,message=?,updated_at=? WHERE id=? AND status='QUEUED'",task.provider().equals("VIDEO_API")?"正在向视频供应商提交任务": "正在处理真实素材",Store.now(),id)==0)return;
         try {
             Project p=s.snapshot(s.db.queryForObject("SELECT snapshot FROM jobs WHERE id=?",String.class,id));
+            if(task.provider().equals("VIDEO_API")) { processVideo(task,p); return; }
             render(id,p);
             s.db.update("UPDATE jobs SET status='REVIEW',progress=100,message='本地粗剪已完成，画面来自上传素材，并非 AI 生成',output_name=?,updated_at=? WHERE id=?",id+".mp4",Store.now(),id);
         } catch(Exception e) {
+            if(task.provider().equals("VIDEO_API")) {
+                if(task.externalTaskId().isBlank()) s.db.update("UPDATE jobs SET status='BLOCKED',message='供应商提交结果不确定；请核对供应商控制台后再决定是否重试，系统不会自动重复提交',updated_at=? WHERE id=?",Store.now(),id);
+                else s.db.update("UPDATE jobs SET message='暂时无法查询供应商任务状态；保留原任务编号并继续查询，不会重新提交',updated_at=? WHERE id=?",Store.now(),id);
+                return;
+            }
             try {Files.deleteIfExists(media.resolve(id+".mp4"));Files.deleteIfExists(media.resolve(id+".srt"));} catch(java.io.IOException ignored) { /* retry can be handled by storage maintenance */ }
             s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?",e instanceof java.io.IOException?"无法读取素材或启动 FFmpeg，请检查文件和 FFMPEG_PATH":"粗剪失败：素材格式不支持、文件损坏或处理超时；请检查素材后重试",Store.now(),id);
         }
     }
+    private void processVideo(Pending task,Project p) throws Exception {
+        String externalId=task.externalTaskId();
+        if(externalId.isBlank()) {
+            String prompt=videoPrompt(p);
+            Shot firstReference=p.shots().stream().filter(shot->shot.assetId()!=null&&!shot.assetId().isBlank()).findFirst().orElse(null);
+            Asset reference=firstReference==null?null:s.asset(p.clientId(),firstReference.assetId());
+            Path referencePath=reference==null?null:media.assetPath(p.clientId(),reference.id());
+            externalId=video.submit(prompt,p.duration(),referencePath,reference==null?null:reference.mime(),reference==null?null:reference.name());
+            s.db.update("UPDATE jobs SET external_task_id=?,progress=10,message='供应商已受理任务，等待生成；不会重复提交',updated_at=? WHERE id=?",externalId,Store.now(),task.id());
+            return;
+        }
+        VideoApiClient.VideoStatus state=video.status(externalId);
+        if(Set.of("queued","pending","in_progress","processing").contains(state.status())) {
+            s.db.update("UPDATE jobs SET progress=?,message=?,updated_at=? WHERE id=?",Math.min(95,Math.max(10,state.progress())),"Seedance 正在生成（供应商任务已保存）",Store.now(),task.id());
+        } else if(state.status().equals("completed")) {
+            byte[] bytes=video.download(externalId);
+            Files.write(media.resolve(task.id()+".mp4"),bytes,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING);
+            Files.writeString(media.resolve(task.id()+".srt"),subtitles(p),StandardCharsets.UTF_8);
+            s.db.update("UPDATE jobs SET status='REVIEW',progress=100,message='Seedance 视频已生成，请人工审片；字幕为独立 SRT',output_name=?,updated_at=? WHERE id=?",task.id()+".mp4",Store.now(),task.id());
+        } else if(Set.of("failed","cancelled","canceled").contains(state.status())) {
+            s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?",state.error()==null||state.error().isBlank()?"Seedance 任务失败；请检查供应商控制台": "Seedance 任务失败；请检查供应商控制台中的错误详情",Store.now(),task.id());
+        } else {
+            s.db.update("UPDATE jobs SET message='供应商返回未知状态；保留任务编号等待核对，不会重新提交',updated_at=? WHERE id=?",Store.now(),task.id());
+        }
+    }
+    private String videoPrompt(Project p) {
+        StringBuilder prompt=new StringBuilder("制作一条电商商品短视频。平台：").append(p.platform()).append("；类目：").append(p.category())
+                .append("；商品：").append(p.name()).append("；已确认事实：").append(p.facts()).append("。不得添加未确认的功效、价格或规格。分镜：");
+        for(int i=0;i<p.shots().size();i++) prompt.append(i+1).append(". ").append(p.shots().get(i).visual()).append("；");
+        return prompt.length()>8000?prompt.substring(0,8000):prompt.toString();
+    }
+    private record Pending(String id,String provider,String externalTaskId,String status) {}
     void render(String id,Project p) throws Exception {
         Path dir=Files.createTempDirectory(media.root,"render-");
         try {

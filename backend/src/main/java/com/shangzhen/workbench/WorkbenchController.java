@@ -13,9 +13,9 @@ import static com.shangzhen.workbench.Models.*;
 @RestController
 @RequestMapping("/api")
 public class WorkbenchController {
-    private final Store s; private final ProjectService projects; private final MediaService media; private final AiService ai; private final MetricsService metrics;
-    public WorkbenchController(Store s,ProjectService projects,MediaService media,AiService ai,MetricsService metrics) {this.s=s;this.projects=projects;this.media=media;this.ai=ai;this.metrics=metrics;}
-    @GetMapping("/system") Map<String,Object> system() {return Map.of("aiMode",ai.mode,"videoProviderConnected",false,"localExport","FFmpeg / MP4 + SRT","version","0.1.0");}
+    private final Store s; private final ProjectService projects; private final MediaService media; private final AiService ai; private final MetricsService metrics; private final VideoApiClient video;
+    public WorkbenchController(Store s,ProjectService projects,MediaService media,AiService ai,MetricsService metrics,VideoApiClient video) {this.s=s;this.projects=projects;this.media=media;this.ai=ai;this.metrics=metrics;this.video=video;}
+    @GetMapping("/system") Map<String,Object> system() {return Map.of("aiMode",ai.mode,"videoProviderConnected",video.enabled(),"videoModel",video.model(),"localExport","FFmpeg / MP4 + SRT","version","0.1.0");}
     @GetMapping("/clients") List<Client> clients(Principal u) {return s.db.query("SELECT * FROM clients WHERE owner=? ORDER BY created_at",s.clients,u.getName());}
     @PostMapping("/clients") Client createClient(Principal u,@Valid @RequestBody ClientInput p) {
         String id=Store.id();s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",id,u.getName(),p.name(),p.category(),Store.now());return s.db.queryForObject("SELECT * FROM clients WHERE id=?",s.clients,id);
@@ -36,8 +36,16 @@ public class WorkbenchController {
     public record Variants(@jakarta.validation.constraints.NotEmpty @jakarta.validation.constraints.Size(max=3) List<@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=80) String> scenes) {}
     @PostMapping("/clients/{c}/projects/{id}/variants") List<Project> variants(Principal u,@PathVariable String c,@PathVariable String id,@Valid @RequestBody Variants p) {s.access(c,u.getName());return projects.variants(c,id,u.getName(),p.scenes());}
     @GetMapping("/clients/{c}/assets") List<Asset> assets(Principal u,@PathVariable String c) {s.access(c,u.getName());return s.db.query("SELECT * FROM assets WHERE client_id=? ORDER BY created_at DESC",s.assets,c);}
-    @PostMapping("/clients/{c}/assets") Asset upload(Principal u,@PathVariable String c,@RequestParam(defaultValue="PRODUCT") String kind,@RequestParam(defaultValue="") String sku,@RequestParam(defaultValue="") String tags,@RequestParam MultipartFile file) throws IOException {
-        s.access(c,u.getName());return media.upload(c,u.getName(),kind,sku,tags,file);
+    @PostMapping("/clients/{c}/assets") Asset upload(Principal u,@PathVariable String c,@RequestParam(defaultValue="PRODUCT") String kind,@RequestParam(defaultValue="") String sku,@RequestParam(defaultValue="") String tags,@RequestParam(defaultValue="") String productName,@RequestParam(defaultValue="") String productGroupId,@RequestParam MultipartFile file) throws IOException {
+        s.access(c,u.getName());return media.upload(c,u.getName(),kind,sku,tags,productName,productGroupId,file);
+    }
+    public record ProductInput(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=100) String productName,@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=100) String sku) {}
+    @PutMapping("/clients/{c}/product-groups/{id}") List<Asset> editProduct(Principal u,@PathVariable String c,@PathVariable String id,@Valid @RequestBody ProductInput p) {
+        s.access(c,u.getName());return media.editProduct(c,id,p.productName(),p.sku());
+    }
+    public record ProductCoverInput(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=100) String assetId) {}
+    @PutMapping("/clients/{c}/product-groups/{id}/cover") List<Asset> setProductCover(Principal u,@PathVariable String c,@PathVariable String id,@Valid @RequestBody ProductCoverInput p) {
+        s.access(c,u.getName());return media.setProductCover(c,id,p.assetId());
     }
     @PutMapping("/clients/{c}/assets/{id}") Asset editAsset(Principal u,@PathVariable String c,@PathVariable String id,@Valid @RequestBody AssetInput p) {
         s.access(c,u.getName());s.asset(c,id);if(!MediaService.KINDS.contains(p.kind())||s.write(p.metadata()).length()>20000)throw Store.bad("素材分类或元数据无效");
