@@ -121,7 +121,7 @@ test('本地API：独立素材、显式报价授权、幂等提交、查单、�
     const output = await fetch(origin + finished.body.task.resultUrl + '?clientId=a', { headers: { Cookie: cookie, Range: 'bytes=0-127' } });
     assert.equal(output.status, 206); assert.equal((await output.arrayBuffer()).byteLength, 128);
     assert.equal((await fetch(origin + finished.body.task.resultUrl + '?clientId=b', { headers: { Cookie: cookie } })).status, 404);
-    assert.equal(fs.readFileSync(path.join(temporary, 'state.json'), 'utf8').includes('fixture-only'), false);
+    assert.equal(JSON.stringify(await backend.readPersistedState()).includes('fixture-only'), false);
     const textProvider = { protocol: 'openai-chat', baseUrl: fixtureOrigin, createPath: '/chat', keyEnv: 'XINLIU_FIXTURE_KEY', model: 'fixture-vl', supportsImageDataUri: true, price: { fixedCredits: 1 } };
     backend.setProviders({ video: provider, vision: textProvider, text: textProvider });
     const vision = await request('/api/tasks', { ...body, kind: 'vision', idempotencyKey: 'vision-a' });

@@ -1,16 +1,16 @@
-const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const { chromium, executablePath, BASE_URL } = require('./browser-runtime.cjs');
 const assert = require('node:assert/strict');
 
 async function main() {
   const browser = await chromium.launch({
-    executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+    executablePath,
     headless: true
   });
   try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
     const errors = [];
     const failedResponses = [];
-    const health = await fetch('http://127.0.0.1:8767/api/health');
+    const health = await fetch(BASE_URL + '/api/health');
     assert.equal(health.status, 200);
     assert.equal((await health.json()).name, '心流');
     page.on('pageerror', error => errors.push(error.message));
@@ -22,7 +22,7 @@ async function main() {
       ['home', '今日制作'],
       ['runs', '生成任务']
     ]) {
-      const response = await page.goto(`http://127.0.0.1:8767/#${route}`);
+      const response = await page.goto(`${BASE_URL}/#${route}`);
       if (response) assert.equal(response.status(), 200);
       await page.getByRole('heading', { name: heading, exact: true }).waitFor();
     }

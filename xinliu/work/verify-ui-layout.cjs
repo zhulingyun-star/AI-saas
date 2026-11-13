@@ -1,24 +1,24 @@
-const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const { chromium, executablePath, BASE_URL } = require('./browser-runtime.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 
 async function main() {
   const output = path.resolve(__dirname, '../outputs/production-workbench');
-  const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true });
   const checks = [];
   try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, reducedMotion: 'reduce' });
     page.setDefaultTimeout(10000);
     const errors = []; const external = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:8767/')) external.push(request.url()); });
+    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith(BASE_URL + '/')) external.push(request.url()); });
     const nav = async view => { await page.evaluate(view => navigate(view), view); await page.waitForFunction(view => viewState.view === view, view); };
     const screenshot = async name => {
       await page.evaluate(() => { document.querySelector('.toast')?.classList.remove('visible'); window.scrollTo(0, 0); });
       await page.screenshot({ path: path.join(output, name) });
     };
-    await page.goto('http://127.0.0.1:8767/#resources');
+    await page.goto(BASE_URL + '/#resources');
     await page.getByRole('heading', { name: '资源中心', exact: true }).waitFor();
     assert.equal(await page.locator('.page-head p').count(), 0);
     assert.equal(await page.locator('.resource-tabs .ui-tab-count').count(), 5);

@@ -1,25 +1,25 @@
-const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const { chromium, executablePath, BASE_URL } = require('./browser-runtime.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
 async function main() {
   const root = path.resolve(__dirname, '../outputs/production-workbench');
-  const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--disable-gpu'] });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   const checks = [];
   try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 1080 }, reducedMotion: 'reduce', acceptDownloads: true });
     page.setDefaultTimeout(10000);
     const errors = []; const external = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:8767/')) external.push(request.url()); });
+    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith(BASE_URL + '/')) external.push(request.url()); });
     const nav = async view => { await page.evaluate(view => navigate(view), view); await page.waitForFunction(view => viewState.view === view, view); };
     const persona = async id => { await page.locator('#collabPersona').selectOption(id); await page.waitForFunction(id => collabActor().id === id, id); };
     const snapshot = async name => {
       await page.evaluate(() => { document.querySelector('.toast')?.classList.remove('visible'); window.scrollTo(0, 0); });
       await page.screenshot({ path: path.join(root, name) });
     };
-    await page.goto('http://127.0.0.1:8767/');
+    await page.goto(BASE_URL + '/');
     await page.getByRole('heading', { name: '项目总览', exact: true }).waitFor();
     await nav('home');
     await page.getByRole('button', { name: '直接做视频' }).click();

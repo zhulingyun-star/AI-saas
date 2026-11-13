@@ -1,4 +1,4 @@
-const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const { chromium, executablePath, BASE_URL } = require('./browser-runtime.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 async function main() {
   const root = path.resolve(__dirname, '../outputs/production-workbench');
   const browser = await chromium.launch({
-    executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+    executablePath,
     headless: true,
     args: ['--disable-gpu']
   });
@@ -15,7 +15,7 @@ async function main() {
     page.setDefaultTimeout(12000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    const base = 'http://127.0.0.1:8767/';
+    const base = BASE_URL + '/';
     const snapshot = async name => {
       await page.evaluate(() => document.querySelector('.toast')?.classList.remove('visible'));
       await page.evaluate(() => window.scrollTo(0, 0));

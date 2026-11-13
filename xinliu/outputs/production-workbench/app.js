@@ -550,7 +550,7 @@ async function uploadFiles(target,files) {
         if(kind!=='音频')throw new Error('请选择音频文件');
         current.voices.push({...base,style:'真人口播',locale:'原音频',gender:'客户原声'});
       }else current.assets.unshift(base);
-      if(target==='draftMedia'){state.config.assets.push(id);if(kind==='图片'){base.sku=state.config.productId==='custom'?'自定义SKU':product().sku;state.config.productId=id;state.config.factsConfirmed=false;}}
+      if(target==='draftMedia'){state.config.assets.push(id);if(kind==='图片'){base.sku='';state.config.productId=id;state.config.factsConfirmed=false;}}
     }
     persist();closeModal();render();toast(`已保存 ${files.length} 个文件到当前客户资源`);
   } catch(error) { toast(error.message); }
@@ -656,24 +656,43 @@ function createJob() {
 }
 
 function parseCsv(text) {
-  const rows=[];let row=[],field='',quoted=false;
+  const rows=[];let row=[],field='',quoted=false,closed=false;
   for(let index=0;index<text.length;index++){
     const char=text[index];
-    if(char==='"'){if(quoted&&text[index+1]==='"'){field+='"';index++;}else quoted=!quoted;}
-    else if(char===','&&!quoted){row.push(field);field='';}
-    else if((char==='\n'||char==='\r')&&!quoted){if(char==='\r'&&text[index+1]==='\n')index++;row.push(field);if(row.some(value=>value.trim()))rows.push(row);row=[];field='';}
+    if(quoted){
+      if(char==='"'){if(text[index+1]==='"'){field+='"';index++;}else{quoted=false;closed=true;}}
+      else field+=char;
+      continue;
+    }
+    if(closed&&char!==','&&char!=='\n'&&char!=='\r'){
+      if(char===' '||char==='\t')continue;
+      throw new Error('CSV引号结束后有无效字符，请校对报表');
+    }
+    if(char==='"'){
+      if(field.trim())throw new Error('CSV引号位置无效，请校对报表');
+      field='';quoted=true;
+    }
+    else if(char===','){row.push(field);field='';closed=false;}
+    else if(char==='\n'||char==='\r'){
+      if(char==='\r'&&text[index+1]==='\n')index++;
+      row.push(field);if(row.some(value=>value.trim()))rows.push(row);row=[];field='';closed=false;
+    }
     else field+=char;
   }
-  if(field||row.length){row.push(field);rows.push(row);}return rows;
+  if(quoted)throw new Error('CSV引号未闭合，请校对报表');
+  if(field||row.length||closed){row.push(field);rows.push(row);}return rows;
 }
 async function importData(file) {
   const rows=parseCsv((await file.text()).replace(/^\uFEFF/,''));const header=rows.shift()?.map(value=>value.trim())||[];
   const required=['素材名','消耗','曝光','点击','订单','成交金额'];
   if(!required.every(value=>header.includes(value)))throw new Error('报表缺少必要列，请先下载模板');
+  if(new Set(header).size!==header.length)throw new Error('报表存在重复列名，请校对报表');
+  if(rows.some(row=>row.length!==header.length))throw new Error('报表数据列数与表头不一致，请校对CSV格式');
   const get=(row,name)=>row[header.indexOf(name)]||'';
-  const numeric=value=>Number(String(value).replace(/[¥￥,\s]/g,''));
-  const records=rows.map(row=>({name:get(row,'素材名'),sku:get(row,'SKU'),spend:numeric(get(row,'消耗')),impressions:numeric(get(row,'曝光')),clicks:numeric(get(row,'点击')),orders:numeric(get(row,'订单')),revenue:numeric(get(row,'成交金额'))}));
+  const numeric=value=>{const text=String(value).replace(/[¥￥,\s]/g,'');return text ? Number(text) : NaN;};
+  const records=rows.map(row=>({name:get(row,'素材名').trim(),sku:get(row,'SKU').trim(),spend:numeric(get(row,'消耗')),impressions:numeric(get(row,'曝光')),clicks:numeric(get(row,'点击')),orders:numeric(get(row,'订单')),revenue:numeric(get(row,'成交金额'))}));
   if(!records.length||records.some(record=>!record.name||['spend','impressions','clicks','orders','revenue'].some(key=>!Number.isFinite(record[key])||record[key]<0)))throw new Error('有无效数值或空素材名，请校对报表');
+  if(records.some(record=>['impressions','clicks','orders'].some(key=>!Number.isSafeInteger(record[key]))))throw new Error('曝光、点击和订单必须是有效的非负整数');
   client().metrics=records;client().dataSource=file.name;persist();closeModal();render();toast(`导入 ${records.length} 条数据并完成真实计算`);
 }
 

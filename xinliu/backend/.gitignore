@@ -1,4 +1,10 @@
 data/
+.runtime/
+*.mv.db
+*.trace.db
 .env.local
+.env.yunxin.local
+yunxin.credentials.local.*
 provider.local.json
 *.log
+!.env.yunxin.example

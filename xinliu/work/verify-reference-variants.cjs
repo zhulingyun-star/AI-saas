@@ -1,4 +1,4 @@
-const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const { chromium, executablePath, BASE_URL } = require('./browser-runtime.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -19,20 +19,26 @@ function referenceVideoFixture(root) {
 }
 async function main() {
   const root = path.resolve(__dirname, '../outputs/production-workbench');
-  const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--disable-gpu'] });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   const checks = [];
   try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 1080 }, reducedMotion: 'reduce', acceptDownloads: true });
     page.setDefaultTimeout(12000);
     const errors = []; const external = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:8767/')) external.push(request.url()); });
+    page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith(BASE_URL + '/')) external.push(request.url()); });
     const nav = async view => { await page.evaluate(view => navigate(view), view); await page.waitForFunction(view => viewState.view === view, view); };
-    await page.goto('http://127.0.0.1:8767/#home');
+    await page.goto(BASE_URL + '/#home');
     await page.getByRole('button', { name: '直接做视频' }).click();
     await page.locator('#flowClaims').fill('当前客户确认：展示外套外观，不承诺性能');
     await page.getByRole('button', { name: '看本条方案' }).click();
     await page.getByRole('heading', { name: '确认这一条的效果' }).waitFor();
+    await page.evaluate(() => { viewState.stage = 4; navigate('studio'); });
+    assert.ok(!(await page.locator('main').innerText()).includes('接口未连接'));
+    const pendingJobs = await page.evaluate(() => client().jobs.length);
+    await page.getByRole('button', { name: '确认方案并准备生成', exact: true }).click();
+    await page.getByRole('heading', { name: '确认这一条的效果' }).waitFor();
+    assert.equal(await page.evaluate(() => client().jobs.length), pendingJobs);
     const original = await page.evaluate(() => ({ workId: state.config.draftId, shots: collabCopy(getShots()), claims: state.config.claims }));
     await nav('reference');
     await page.locator('#referenceVideoUpload').setInputFiles({ name: '参考片-本地10秒测试.webm', mimeType: 'video/webm', buffer: referenceVideoFixture(root) });

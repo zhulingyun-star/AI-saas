@@ -24,7 +24,7 @@ function guardContext(project) {
   config.factRecords ||= [];
   config.materialRefs ||= [];
   config.knowledgeSnapshots ||= [];
-  config.outputSpec ||= { aspect: '9:16', resolution: '1080p', model: 'Seedance 2.5（待接入）' };
+  config.outputSpec ||= { aspect: '9:16', resolution: '480p', model: 'doubao-seedance-2-0-260128' };
   config.executionScope ||= { count: 1, automatic: false, retries: 0, budgetLimit: null };
   for (const id of config.knowledgeIds || []) {
     if (config.knowledgeSnapshots.some(item => item.id === id)) continue;
@@ -114,12 +114,13 @@ function guardDirectStart() {
   const preset = current.preferences.find(item => item.enabled !== false && item.config.category === category);
   const productId = [...productCatalog, ...current.assets].some(item => item.id === previous.productId && item.category === category) ? previous.productId : productCatalog.find(item => item.category === category)?.id || 'custom';
   const recipe = flowRecipeSeeds.find(item => item.category === category && item.format === preset?.config.format) || flowRecipeSeeds.find(item => item.category === category);
-  state.config = { ...defaultConfig(), ...flowCopy(preset?.config || {}), category, recipeId: recipe?.id || '', recipeName: preset?.name || recipe?.name || '客户常用拍法', format: recipe?.format || categories[category].style, duration: recipe?.duration || 15, shotsCount: recipe?.roles.length || 4, direct: true, draftId: '', originJobId: null, claims: '', price: '', assets: [], knowledgeIds: [], knowledgeSnapshots: [], factRecords: [], materialRefs: [] };
+  state.config = { ...defaultConfig(), ...flowCopy(preset?.config || {}), category, recipeId: recipe?.id || '', recipeName: preset?.name || recipe?.name || '客户常用拍法', format: recipe?.format || categories[category].style, duration: 4, shotsCount: 1, generateAudio: false, outputSpec: { aspect: '9:16', resolution: '480p', model: 'doubao-seedance-2-0-260128' }, direct: true, draftId: '', originJobId: null, claims: '', price: '', assets: [], knowledgeIds: [], knowledgeSnapshots: [], factRecords: [], materialRefs: [] };
   flowChooseProduct(productId);
   const project = flowProject();
   project.flow = true;
   project.name = `${product().name} · ${state.config.format}`;
   flowBuildShots(project, recipe);
+  flowRestructureShots(project, 1, 4);
   flowUi.issue = '';
   viewState.activeShot = 0;
   saveDraft();
@@ -203,7 +204,7 @@ function guardApprovalMarkup(project) {
   guardContext(project);
   const config = state.config;
   const spec = config.outputSpec;
-  return `<details class="guard-approval"><summary>规格与执行范围 <span>${spec.aspect} · ${spec.resolution} · ${config.duration}s · 1 条</span></summary><div class="guard-spec-grid">${selectorField('画幅', 'guardAspect', ['9:16', '16:9', '1:1'], spec.aspect)}${selectorField('目标分辨率', 'guardResolution', ['720p', '1080p'], spec.resolution)}<div class="guard-spec-value"><small>目标时长</small><strong>${config.duration}s</strong></div><div class="guard-spec-value"><small>视频模型</small><strong>Seedance 2.5</strong><span>能力与规格待联调</span></div></div><div class="guard-cost-row"><span>本次只保存方案与产单</span><strong>0 积分</strong></div><details class="guard-cost-details"><summary>真实调用前需要另行授权费用</summary><p>图片理解、文本方案、视频和后期可能分别计费。目前均未接入，不执行这些调用。</p><label class="field mt"><span>真实任务预算上限（选填，当前不生效）</span><input class="input" id="guardBudget" type="number" min="0" step="1" placeholder="未设置，不授权收费" value="${config.executionScope.budgetLimit ?? ''}"></label><p>固定 1 条、不自动重试；接口接通后核对报价与余额，再单独确认。当前预算只是计划，不是支付授权。</p></details></details>`;
+  return `<details class="guard-approval"><summary>规格与执行范围 <span>${spec.aspect} · ${spec.resolution} · ${config.duration}s · 1 条</span></summary><div class="guard-spec-grid">${selectorField('画幅', 'guardAspect', ['9:16', '16:9', '1:1'], spec.aspect)}${selectorField('目标分辨率', 'guardResolution', ['480p', '720p', '1080p'], spec.resolution)}<div class="guard-spec-value"><small>目标时长</small><strong>${config.duration}s</strong></div><div class="guard-spec-value"><small>视频模型</small><strong>Seedance 2.0</strong><span>模型权限与报价需配置</span></div></div><div class="guard-cost-row"><span>本次只保存方案与产单</span><strong>0 积分</strong></div><details class="guard-cost-details"><summary>真实调用前需要另行授权费用</summary><p>图片理解、文本方案、视频和后期可能分别计费。保存方案不调用模型；视频通过SilvaMux提交，报价和权限未配置时拦截。</p><label class="field mt"><span>真实任务预算上限（选填，当前不生效）</span><input class="input" id="guardBudget" type="number" min="0" step="1" placeholder="未设置，不授权收费" value="${config.executionScope.budgetLimit ?? ''}"></label><p>固定 1 条、不自动重试；接口接通后核对报价与余额，再单独确认。当前预算只是计划，不是支付授权。</p></details></details>`;
 }
 function guardLibraryContent(tab) {
   const current = guardNormalize();

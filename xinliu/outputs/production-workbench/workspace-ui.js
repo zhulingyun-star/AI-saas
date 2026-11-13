@@ -138,8 +138,8 @@ function workspaceStudio() {
     body = `<section class="card"><div class="card-header"><h3>制作确认</h3>${badge('1 条')}</div><div class="section-block"><div class="summary-fields"><div><label>商品</label>${escapeText(product().name)} / ${escapeText(product().sku)}</div><div><label>输出</label>${config.platform} · ${config.duration}s · ${getShots().length} 镜</div></div>
       <details class="workspace-details mt"><summary>查看制作配置与完整提示词</summary><textarea class="input mt" readonly style="height:250px">${escapeText(compilePrompt())}</textarea></details>
       <div class="output-choice mt"><div><h3>导出本地粗剪</h3><p>已有素材、字幕与上传口播 · WebM · 0 模型积分</p></div>${button('导出预览视频', 'export-preview', 'primary', viewState.renderBusy ? 'disabled' : '')}</div>
-      <div class="output-choice"><div><h3>Seedance 生成产单</h3><p>接口未连接 · 创建产单不会扣费</p></div>${button('创建待提交产单', 'create-job')}</div>
-      <div class="notice warn mt">本地粗剪不生成新人物动作；真实模型费用需接入供应商后确认</div>
+      <div class="output-choice"><div><h3>视频生成</h3><p>先确认方案，再准备素材与报价</p></div>${button('确认方案并准备生成', 'flow-build-brief', 'primary')}</div>
+      <div class="notice warn mt">本地粗剪使用已有素材；模型生成需另行确认素材用途和本次费用</div>
       <details class="workspace-details"><summary>其他交付操作</summary><div class="row wrap gap8 mt">${button('导出脚本与 SRT', 'export-script')}${button('用此配置排产', 'nav', '', 'data-view="batch"')}${button('保存客户预设', 'save-template')}</div></details></div></section>`;
   }
   const origin = project?.originJobId ? client().jobs.find(job => job.id === project.originJobId) : null;
@@ -328,7 +328,7 @@ document.addEventListener('click', event => {
       case 'workspace-formats': workspaceUi.allFormats = !workspaceUi.allFormats; render(); break;
       case 'workspace-shot': viewState.activeShot = Number(target.dataset.index); render(); updatePreview(viewState.activeShot, getShots()[viewState.activeShot].start); break;
       case 'workspace-script-settings':
-        openModal('调整镜头结构', `${selectorField('时长', 'workspaceDuration', ['10', '15', '20', '30'], String(state.config.duration))}${selectorField('镜头数', 'workspaceShotCount', [{ id: 3, name: '3 镜 · 单卖点' }, { id: 4, name: '4 镜 · 口播与证据' }, { id: 5, name: '5 镜 · 节奏混剪' }], state.config.shotsCount)}<p class="meta">更改会重排未锁定镜头</p>${button('应用', 'workspace-apply-structure', 'primary mt')}`);
+        openModal('调整镜头结构', `${selectorField('时长', 'workspaceDuration', ['4', '5', '8', '10', '15', '20', '30'], String(state.config.duration))}${selectorField('镜头数', 'workspaceShotCount', [{ id: 1, name: '1 镜 · 短片测试' }, { id: 3, name: '3 镜 · 单卖点' }, { id: 4, name: '4 镜 · 口播与证据' }, { id: 5, name: '5 镜 · 节奏混剪' }], state.config.shotsCount)}<p class="meta">更改会重排未锁定镜头</p>${button('应用', 'workspace-apply-structure', 'primary mt')}`);
         break;
       case 'workspace-apply-structure': {
         state.config.duration = Number(document.getElementById('workspaceDuration').value);

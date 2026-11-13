@@ -22,7 +22,7 @@ function generationCapabilityMarkup(work) {
   const config = state.config;
   const capability = config.generationCapability || (work.drama ? 'drama' : 'commerce');
   const videos = client().assets.filter(asset => asset.kind === '视频' && asset.fileId);
-  return `<details class="generation-capability"><summary>制作能力与独立策略 <span>${XinliuStrategies.capabilities[capability]?.name || '商品图出片'}</span></summary><div class="setting-grid mt">${selectorField('制作能力', 'generationCapability', Object.entries(XinliuStrategies.capabilities).map(([id, item]) => ({ id, name: item.name })), capability)}<label class="field"><span>商品细类（选填）</span><input class="input" id="generationSubcategory" value="${escapeText(config.subcategory || '')}" placeholder="例如：外套 / 宠物食品 / 折叠器具"></label></div>
+  return `<details class="generation-capability"><summary>制作能力与独立策略 <span>${XinliuStrategies.capabilities[capability]?.name || '商品图出片'}</span></summary><div class="setting-grid mt">${button('使用4秒低成本规格', 'generation-low-cost', 'sm')}<label class="row small"><input type="checkbox" class="checkbox" id="generationAudio" ${config.generateAudio === true ? 'checked' : ''}>生成声音</label>${selectorField('制作能力', 'generationCapability', Object.entries(XinliuStrategies.capabilities).map(([id, item]) => ({ id, name: item.name })), capability)}<label class="field"><span>商品细类（选填）</span><input class="input" id="generationSubcategory" value="${escapeText(config.subcategory || '')}" placeholder="例如：外套 / 宠物食品 / 折叠器具"></label></div>
     ${capability === 'motion' ? `<div class="generation-motion-note">动作迁移需要目标人物图、商品图及真实动作视频，不是普通图生视频。后端只向明确声明支持 motion 的供应商提交。</div><div class="setting-grid mt">${selectorField('动作视频', 'generationMotionAsset', [{ id: '', name: '选择已上传的视频' }, ...videos.map(asset => ({ id: asset.id, name: asset.name }))], config.motion?.assetId || '')}${selectorField('迁移范围', 'generationMotionScope', ['身体与表情', '身体动作', '手部操作', '运镜参考'], config.motion?.scope || '身体与表情')}<label class="field"><span>片段开始（秒）</span><input type="number" min="0" step=".1" id="generationMotionStart" class="input" value="${config.motion?.start || 0}"></label><label class="field"><span>片段结束（秒）</span><input type="number" min=".1" step=".1" id="generationMotionEnd" class="input" value="${config.motion?.end || config.duration}"></label></div><label class="field"><span>关键动作与接触关系（选填）</span><textarea class="input" id="generationMotionDescription">${escapeText(config.motion?.description || '')}</textarea></label>${button('选择目标人物', 'workspace-picker', 'sm', 'data-kind="models"')}` : ''}
     <p class="meta mt">策略独立编译为视觉识别、编导方案、视频执行三种Prompt；提示词不等于供应商已经支持该能力。</p></details>`;
 }
@@ -48,14 +48,14 @@ function generationAfterRender() {
   }
 }
 function generationSettingsMarkup() {
-  return `<section class="card pad"><div class="flow-section-head"><h3>心流出片API</h3>${button('检查接口状态', 'generation-settings', 'sm')}</div><p class="small">本地地址 <code>/api/health</code>；生成路径 <code>/api/tasks</code> → <code>/quote</code> → <code>/submit</code> → <code>/refresh</code> → <code>/result</code></p><p class="mt"><a class="link" href="/api.html" target="_blank" rel="noopener">接口文档与OpenAPI</a></p><div class="generation-endpoints mt"><div><strong>视觉识别</strong><span>独立供应商与报价，候选事实需核对</span></div><div><strong>编导模型</strong><span>独立Prompt，不自动进入视频生成</span></div><div><strong>视频 / 动作迁移</strong><span>按能力声明、时长、画幅和报价拦截</span></div></div><p class="meta mt">配置在服务器 <code>backend/provider.local.json</code>；密钥通过环境变量读取，不在浏览器录入。URL不是凭空猜测的Seedance接口，请按你的供应商文档配置。</p><details class="workspace-details"><summary>联调能力与安全边界</summary><p class="small mt">当前是回环地址、单操作者测试服务，具备文件与任务落盘、幂等提交、超时未知保护、结果转存和视频Range读取。不是生产团队登录、多租户隔离或实际费用结算。</p><p class="small mt">本地视频供应商无法直接访问，请提供授权公网HTTPS素材URL；图片仅在供应商支持时使用data URI。不会自动暴露本机文件或跨客户传素材。</p></details></section>`;
+  return `<section class="card pad"><div class="flow-section-head"><h3>心流出片API</h3>${button('检查接口状态', 'generation-settings', 'sm')}</div><p class="small">本地地址 <code>/api/health</code>；生成路径 <code>/api/tasks</code> → <code>/quote</code> → <code>/submit</code> → <code>/refresh</code> → <code>/result</code></p><p class="mt"><a class="link" href="/api.html" target="_blank" rel="noopener">接口文档与OpenAPI</a></p><div class="generation-endpoints mt"><div><strong>视觉识别</strong><span>独立供应商与报价，候选事实需核对</span></div><div><strong>编导模型</strong><span>独立Prompt，不自动进入视频生成</span></div><div><strong>视频 / 动作迁移</strong><span>按能力声明、时长、画幅和报价拦截</span></div></div><p class="meta mt">配置在服务器 <code>backend/provider.local.json</code>；密钥通过环境变量读取，不在浏览器录入。Yunxin与SilvaMux独立配置，可分别选择文本、图片理解和视频供应商。短片试运行仅开放480p。</p><details class="workspace-details"><summary>联调能力与安全边界</summary><p class="small mt">当前是回环地址、单操作者测试服务，具备文件与任务落盘、幂等提交、超时未知保护、结果转存和视频Range读取。不是生产团队登录、多租户隔离或实际费用结算。</p><p class="small mt">本地视频供应商无法直接访问，请提供授权公网HTTPS素材URL；图片仅在供应商支持时使用data URI。不会自动暴露本机文件或跨客户传素材。</p></details></section>`;
 }
 async function generationSettings() {
   openModal('出片接口状态', '<p class="meta">正在检查本地API，不调用模型</p>');
   try {
     const config = await generationRequest('/api/config');
     generationUi.status = config;
-    openModal('出片接口状态', `<div class="stack">${Object.entries(config.providers).map(([kind, provider]) => `<div class="draft-row"><div class="grow"><strong>${{ vision: '图片理解', text: '文本编导', video: '视频生成' }[kind]} · ${provider.ready ? '已配置，尚需实测' : '未配置'}</strong><p class="meta">${escapeText(provider.model || '缺少真实模型ID与服务器密钥')} · ${provider.pricingConfigured ? '有配置估价' : '报价未知'}</p>${kind === 'video' ? `<p class="meta">供应商声明：${escapeText(provider.capabilities.join(' / ') || '尚无能力声明')}</p>` : ''}</div></div>`).join('')}<p class="small">${escapeText(config.note)}</p><p class="meta">检查状态不验证密钥、供应商质量或实际出片。需要你的正式创建/查单文档才能确认兼容。</p></div>`, true);
+    openModal('出片接口状态', `<div class="stack">${Object.entries(config.providers).map(([kind, provider]) => `<div class="draft-row"><div class="grow"><strong>${{ vision: '图片理解', text: '文本编导', video: '视频生成' }[kind]} · ${provider.ready ? '已配置，尚需实测' : '未配置'}</strong><p class="meta">${escapeText(provider.id || 'custom')} / ${escapeText(provider.model || '缺少真实模型ID与服务器密钥')} · ${provider.pricingConfigured ? '有配置估价' : '报价未知'}</p>${kind === 'video' ? `<p class="meta">供应商声明：${escapeText(provider.capabilities.join(' / ') || '尚无能力声明')}</p>` : ''}</div></div>`).join('')}<p class="small">${escapeText(config.note)}</p><p class="meta">检查状态不验证密钥、供应商质量或实际出片。已配置不代表已验证上游权限、模型质量或实际扣费；调用前仍需逐次确认报价。</p></div>`, true);
   } catch (error) { openModal('出片接口尚未可用', `<p class="guard-error">${escapeText(error.message)}</p><p class="meta mt">请双击启动网站，运行新版后端；当前不生成、不扣费。</p>`); }
 }
 function generationCandidates(kind, work) {
@@ -65,9 +65,14 @@ function generationCandidates(kind, work) {
   const video = client().assets.find(item => item.id === config.motion?.assetId) || client().assets.find(item => item.fileId === config.referenceContext?.source?.fileId);
   const rows = [];
   if (!work.drama && kind !== 'text') rows.push({ item: productItem, role: 'product_image', label: '商品图片' });
+  if (!work.drama && kind !== 'text') for (const ref of config.materialRefs || []) {
+    if (ref.role !== '商品外观' || ref.assetId === productItem.id) continue;
+    const item = client().assets.find(asset => asset.id === ref.assetId);
+    if (item?.kind === '图片' && !rows.some(row => row.item?.id === item.id)) rows.push({ item, role: 'product_image', label: '商品多角度参考' });
+  }
   if (kind === 'video' && (model || ['motion', 'dialogue', 'drama'].includes(config.generationCapability || (work.drama ? 'drama' : 'commerce')))) rows.push({ item: model, role: 'character_image', label: '目标人物图片' });
   if (kind === 'video' && selectedLook()) for (const partId of selectedLook().parts || []) rows.push({ item: getGarments().find(item => item.id === partId), role: 'garment_image', label: '固定服装参考' });
-  if (kind === 'video' && selectedVoice()?.fileId) rows.push({ item: selectedVoice(), role: 'voice_audio', label: '真人音频参考' });
+  if (kind === 'video' && config.generateAudio === true && selectedVoice()?.fileId) rows.push({ item: selectedVoice(), role: 'voice_audio', label: '真人音频参考' });
   if (kind === 'video' && (config.generationCapability === 'motion' || config.generationCapability === 'reference')) rows.push({ item: video, role: config.generationCapability === 'motion' ? 'motion_video' : 'reference_video', label: '动作 / 参考视频' });
   return rows;
 }
@@ -79,13 +84,13 @@ function generationPrepareDialog(kind) {
   const candidates = generationCandidates(kind, work);
   if (candidates.some(candidate => !candidate.item?.fileId && !candidate.item?.image)) { toast('缺少当前能力需要的商品、人物或动作视频，请先补素材'); return; }
   generationUi.pending = { workId: work.id, clientId: state.activeClient, campaignId: work.campaignId, input: { config: collabCopy(state.config), shots: collabCopy(work.shots), product: collabCopy(product()), model: selectedModel() ? collabCopy(selectedModel()) : null, look: selectedLook() ? collabCopy(selectedLook()) : null, voice: selectedVoice() ? collabCopy(selectedVoice()) : null, drama: collabCopy(work.drama || null) }, candidates, signature: flowSignature(state.config, work.shots, work.drama || null), kind };
-  openModal('准备出片素材与报价', `<p class="small">本次${{ video: '视频生成', vision: '图片理解', text: '编导方案' }[kind]}，只准备一条，不自动重试。下一步上传到本地后端并获取配置报价；尚不调用收费模型。</p><div class="generation-assets mt">${candidates.map((candidate, index) => `<div>${imageMarkup(candidate.item, 'file-thumb')}<div class="grow"><strong>${candidate.label}：${escapeText(candidate.item.name)}</strong><label class="field mt"><span>供应商可访问的HTTPS URL（图片data URI支持时可留空）</span><input class="input" data-generation-url="${index}" value="${escapeText(state.generationPublicUrls?.[candidate.item.id] || '')}" placeholder="https://你的授权素材存储/文件"></label></div></div>`).join('')}</div>
+  openModal('准备出片素材与报价', `<p class="small">本次${{ video: '视频生成', vision: '图片理解', text: '编导方案' }[kind]}，只准备一条，不自动重试。${kind === 'video' ? `${state.config.duration}秒 / ${escapeText(state.config.outputSpec?.resolution || '480p')} / ${state.config.generateAudio === true ? '有声' : '无声'}。` : ''}下一步上传到本地后端并获取配置报价；尚不调用收费模型。</p><div class="generation-assets mt">${candidates.map((candidate, index) => `<div>${imageMarkup(candidate.item, 'file-thumb')}<div class="grow"><strong>${candidate.label}：${escapeText(candidate.item.name)}</strong><label class="field mt"><span>供应商可访问的HTTPS URL（图片data URI支持时可留空）</span><input class="input" data-generation-url="${index}" value="${escapeText(state.generationPublicUrls?.[candidate.item.id] || '')}" placeholder="https://你的授权素材存储/文件"></label></div></div>`).join('')}</div>
     <label class="row small mt"><input type="checkbox" class="checkbox" id="generationAssetRights"> 我确认商品、人物与参考视频可供该供应商处理；示例人像不能默认商用</label><p class="meta mt">本地测试上传限制16MB。视频没有公网URL会在报价前拦截，不开放本机文件给外部访问。</p><p class="guard-error" id="generationError" role="alert"></p>${button('上传素材并准备报价（不生成）', 'generation-quote', 'primary full mt')}`, true);
   hydrateFiles();
 }
 async function generationUpload(candidate, url, clientId) {
   const item = candidate.item;
-  let base64 = null; let type = candidate.role.endsWith('_video') ? 'video/mp4' : 'image/jpeg';
+  let base64 = null; let type = candidate.role.endsWith('_video') ? 'video/mp4' : candidate.role === 'voice_audio' ? 'audio/mpeg' : 'image/jpeg';
   if (!url) {
     let blob;
     if (item.fileId) blob = await readFile(item.fileId);
@@ -125,7 +130,7 @@ async function generationQuote() {
     persist();
     const { quote } = await generationRequest(`/api/tasks/${result.task.id}/quote`, { clientId: pending.clientId });
     generationUi.quote = quote;
-    openModal('确认本次模型调用费用', `<div class="generation-quote-total"><span>${{ video: '视频生成', vision: '图片理解', text: '文本编导' }[pending.kind]} · 1次调用</span><strong>${quote.credits} 估价积分</strong></div><p class="small">${escapeText(quote.source)}。确认后会向你的供应商发请求，可能产生实际费用；本地预留不是供应商结算，不自动重试。</p><label class="field mt"><span>本次授权费用上限</span><input type="number" min="${quote.credits}" class="input" id="generationSpendCap" value="${quote.credits}"></label><label class="row small"><input type="checkbox" class="checkbox" id="generationSpendApproved"> 我授权本次调用及上述估价，费用需后续核对</label><p id="generationError" class="guard-error" role="alert"></p>${button('确认调用模型（可能扣费）', 'generation-submit', 'primary full mt')}`, true);
+    openModal('确认本次模型调用费用', `<div class="generation-quote-total"><span>${{ video: '视频生成', vision: '图片理解', text: '文本编导' }[pending.kind]} · 1次调用</span><strong>${quote.credits} 估价积分</strong></div><p class="small">${quote.spec ? `${quote.spec.duration}秒 / ${escapeText(quote.spec.resolution)} / ${quote.spec.generate_audio ? '有声' : '无声'}。` : ''}${escapeText(quote.source)}。确认后会向你的供应商发请求，可能产生实际费用；本地预留不是供应商结算，不自动重试。</p><label class="field mt"><span>本次授权费用上限</span><input type="number" min="${quote.credits}" class="input" id="generationSpendCap" value="${quote.credits}"></label><label class="row small"><input type="checkbox" class="checkbox" id="generationSpendApproved"> 我授权本次调用及上述估价，费用需后续核对</label><p id="generationError" class="guard-error" role="alert"></p>${button('确认调用模型（可能扣费）', 'generation-submit', 'primary full mt')}`, true);
   } catch (error) {
     if (errorPanel?.isConnected) errorPanel.textContent = error.message; else toast(error.message);
   } finally { generationUi.busy = false; const control = document.querySelector('[data-action="generation-quote"]'); if (control) control.disabled = false; }
@@ -149,8 +154,8 @@ async function generationSubmit() {
 function generationTaskDialog(task) {
   generationUi.taskId = task.id; generationUi.taskClientId = task.clientId; generationUi.sourceWorkId = task.workId;
   generationUi.lastTask = task;
-  const labels = { draft: '未调用', submitting: '提交中', running: '生成中', queued: '排队', unknown: '状态未知，先核对', succeeded: '结果已返回', failed: '供应商声明失败', result_unavailable: '结果获取失败，可查单，不重生成' };
-  openModal('真实后端任务', `<div class="summary-fields"><div><label>任务</label>${escapeText(task.id)}</div><div><label>状态</label>${labels[task.status] || task.status}</div><div><label>上游编号</label>${escapeText(task.upstreamId || '尚无编号')}</div><div><label>策略</label>${escapeText(task.strategyId)} v${task.strategyVersion}</div></div><p class="meta mt">${escapeText(task.financialStatus)}</p>${task.error ? `<p class="guard-error">${escapeText(task.error)}</p>` : ''}${task.resultUrl ? `<video controls class="flow-result-video mt" src="${escapeText(task.resultUrl + '?clientId=' + encodeURIComponent(task.clientId))}"></video>` : task.output?.text ? `<label class="field mt"><span>模型返回（人工核对，不自动执行）</span><textarea readonly class="input" style="height:240px">${escapeText(task.output.text)}</textarea></label>` : '<p class="meta mt">没有可播放结果时不使用示例视频冒充模型生成</p>'}<div class="row wrap gap8 mt">${task.kind === 'video' && task.status !== 'succeeded' ? button('查询上游状态（不重新生成）', 'generation-refresh') : ''}${task.resultUrl ? button('带入当前作品待审片', 'generation-import-result', 'primary') : task.output?.text ? button('保存候选到当前草稿（需核对）', 'generation-adopt-candidate', 'primary') : ''}${button('返回任务列表', 'generation-tasks')}</div>`, true);
+  const labels = { draft: '未调用', submitting: '提交中', running: '生成中', queued: '排队', unknown: '状态未知，先核对', succeeded: '结果已返回', failed: '供应商声明失败', rejected: '提交被拒绝，未创建任务', result_unavailable: '结果获取失败，可查单，不重生成' };
+  openModal('真实后端任务', `<div class="summary-fields"><div><label>任务</label>${escapeText(task.id)}</div><div><label>状态</label>${labels[task.status] || task.status}</div><div><label>供应商 / 模型</label>${escapeText(task.provider || 'custom')} / ${escapeText(task.model || '未提交')}</div><div><label>上游编号</label>${escapeText(task.upstreamId || '尚无编号')}</div><div><label>策略</label>${escapeText(task.strategyId)} v${task.strategyVersion}</div></div><p class="meta mt">${escapeText(task.financialStatus)}</p>${task.error ? `<p class="guard-error">${escapeText(task.error)}</p>` : ''}${task.resultUrl ? `<video controls class="flow-result-video mt" src="${escapeText(task.resultUrl + '?clientId=' + encodeURIComponent(task.clientId))}"></video>` : task.output?.text ? `<label class="field mt"><span>模型返回（人工核对，不自动执行）</span><textarea readonly class="input" style="height:240px">${escapeText(task.output.text)}</textarea></label>` : '<p class="meta mt">没有可播放结果时不使用示例视频冒充模型生成</p>'}<div class="row wrap gap8 mt">${task.kind === 'video' && task.upstreamId && !['succeeded', 'failed', 'rejected'].includes(task.status) ? button('查询上游状态（不重新生成）', 'generation-refresh') : ''}${task.resultUrl ? button('带入当前作品待审片', 'generation-import-result', 'primary') : task.output?.text ? button('保存候选到当前草稿（需核对）', 'generation-adopt-candidate', 'primary') : ''}${button('返回任务列表', 'generation-tasks')}</div>`, true);
 }
 function generationContextMatches(pending) {
   const work = client().projects.find(item => item.id === pending?.workId);
@@ -212,6 +217,14 @@ document.addEventListener('click', event => {
   const permitted = readActions.includes(action) ? collabCan('manage', project) || collabCan('generate', project) : collabCan(action === 'generation-settings' ? 'finance' : ['generation-import-result', 'generation-adopt-candidate'].includes(action) ? 'edit' : 'generate', project);
   if (!permitted) return collabReject();
   switch (action) {
+    case 'generation-low-cost':
+      openModal('使用4秒低成本规格', `<p>将当前方案改为4秒、480p、无声，保留第一镜。原方案存入历史；修改后需重新确认。</p>${button('应用并重新编辑方案', 'generation-apply-low-cost', 'primary mt')}`); break;
+    case 'generation-apply-low-cost':
+      if (!work || !collabCan('edit', project)) return collabReject();
+      flowSnapshot(work, '应用4秒测试规格前');
+      state.config.duration = 4; state.config.shotsCount = 1; state.config.generateAudio = false;
+      state.config.outputSpec = { aspect: state.config.outputSpec?.aspect || '9:16', resolution: '480p', model: 'doubao-seedance-2-0-260128' };
+      flowRestructureShots(work, 1, 4); saveDraft(); closeModal(); render(); break;
     case 'generation-settings': generationSettings(); break;
     case 'generation-prepare': generationPrepareDialog(control.dataset.kind || 'video'); break;
     case 'generation-quote': generationQuote(); break;
@@ -226,6 +239,7 @@ document.addEventListener('click', event => {
 document.addEventListener('change', event => {
   const target = event.target;
   const fields = { generationCapability: 'generationCapability', generationSubcategory: 'subcategory' };
+  if (target.id === 'generationAudio') { state.config.generateAudio = target.checked; saveDraft(); render(); }
   if (fields[target.id]) { state.config[fields[target.id]] = target.value; if (target.id === 'generationCapability' && target.value === 'motion') state.config.motion ||= { scope: '身体与表情', start: 0, end: state.config.duration, description: '', assetId: '' }; saveDraft(); render(); }
   const motionFields = { generationMotionAsset: 'assetId', generationMotionScope: 'scope', generationMotionStart: 'start', generationMotionEnd: 'end', generationMotionDescription: 'description' };
   if (motionFields[target.id]) { state.config.motion ||= {}; state.config.motion[motionFields[target.id]] = target.type === 'number' ? Number(target.value) : target.value; saveDraft(); }

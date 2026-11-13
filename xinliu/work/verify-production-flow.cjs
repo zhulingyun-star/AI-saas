@@ -1,11 +1,11 @@
-const { chromium } = require('./ui-runtime/node_modules/playwright-core');
+const { chromium, executablePath, BASE_URL } = require('./browser-runtime.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 
 async function main() {
   const root = path.resolve(__dirname, '../outputs/production-workbench');
-  const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--disable-gpu'] });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   const checks = [];
   try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, reducedMotion: 'reduce', acceptDownloads: true });
@@ -13,13 +13,13 @@ async function main() {
     const errors = [];
     const requests = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1:8767/') && !request.url().startsWith('data:') && !request.url().startsWith('blob:')) requests.push(request.url()); });
+    page.on('request', request => { if (!request.url().startsWith(BASE_URL + '/') && !request.url().startsWith('data:') && !request.url().startsWith('blob:')) requests.push(request.url()); });
     const nav = async view => { await page.evaluate(view => navigate(view), view); await page.waitForFunction(view => viewState.view === view, view); };
     const snapshot = async name => {
       await page.evaluate(() => { document.querySelector('.toast')?.classList.remove('visible'); window.scrollTo(0, 0); });
       await page.screenshot({ path: path.join(root, name) });
     };
-    await page.goto('http://127.0.0.1:8767/#home');
+    await page.goto(BASE_URL + '/#home');
     await page.getByRole('heading', { name: '今日制作', exact: true }).waitFor();
     assert.equal(await page.locator('nav[aria-label="主导航"] .navbutton').count(), 6);
     assert.equal(await page.locator('.flow-recipe').count(), 4);

@@ -1,0 +1,45 @@
+{
+  "description": "SilvaMux Ark video adapter. Verified text access; video MODEL_ACCESS_DENIED on 2026-11-12. Configure pricing and result origins before charging.",
+  "providers": {
+    "video": {
+      "protocol": "ark-video",
+      "baseUrl": "https://www.silvamux.com",
+      "keyEnv": "SILVAMUX_API_KEY",
+      "model": "doubao-seedance-2-0-260128",
+      "createPath": "/api/v3/contents/generations/tasks",
+      "statusPath": "/api/v3/contents/generations/tasks/{id}",
+      "capabilities": [
+        "commerce",
+        "reference",
+        "scene",
+        "dialogue",
+        "drama"
+      ],
+      "supportedAspects": [
+        "9:16",
+        "16:9",
+        "1:1"
+      ],
+      "supportedResolutions": [
+        "480p"
+      ],
+      "minDuration": 4,
+      "maxDuration": 15,
+      "supportsImageDataUri": true,
+      "supportsAudioReference": true,
+      "supportsGarmentReference": true,
+      "allowedResultOrigins": [],
+      "price": {
+        "creditsPerSecond": null
+      },
+      "response": {
+        "resultPath": "content.video_url",
+        "failed": [
+          "failed",
+          "cancelled",
+          "expired"
+        ]
+      }
+    }
+  }
+}
