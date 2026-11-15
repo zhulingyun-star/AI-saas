@@ -20,7 +20,7 @@ function collabState() {
 function collabActor() { return collabState().members.find(member => member.id === collabState().actorId && member.active) || {id:'inactive',name:'停用身份',role:'guest',active:false,clientIds:[],projectIds:[],grants:{}}; }
 function collabName(id) { return collabState().members.find(member => member.id === id)?.name || '未分配'; }
 function collabCampaign(id) { return collabState().campaigns.find(project => project.id === id); }
-function collabClientAllowed(clientId, member = collabActor()) { return Boolean(member?.active && (member.clientIds.includes('*') || member.clientIds.includes(clientId))); }
+function collabClientAllowed(clientId, member = collabActor()) { return Boolean(member?.active && (!state.teams || member.role === 'guest' || XLTeam.visibleClients().includes(clientId)) && (member.clientIds.includes('*') || member.clientIds.includes(clientId))); }
 function collabVisible(project, member = collabActor()) {
   return Boolean(project && collabClientAllowed(project.clientId, member) && (['owner', 'admin'].includes(member.role) || member.projectIds.includes('*') || member.projectIds.includes(project.id) || project.memberIds.includes(member.id)));
 }
@@ -41,6 +41,9 @@ function collabLog(action, projectId, detail) {
 function collabNotify(memberId, campaignId, message, workId = '') {
   if (!memberId) return;
   collabState().notifications.unshift({ id: uniqueId('notice'), memberId, campaignId, message, workId, read: false, at: new Date().toISOString() });
+}
+function collabNoticeVisible(notice) {
+  return notice.campaignId ? collabVisible(collabCampaign(notice.campaignId)) : Boolean(notice.clientId && collabClientAllowed(notice.clientId));
 }
 function collabNewCampaign(clientId, name = '日常素材', values = {}) {
   const actorId = collabActor().id;
@@ -290,7 +293,7 @@ function collabBulkDialog() {
 }
 function collabTeam() {
   if (!collabCan('team') && !collabCan('manage')) return collabDenied();
-  const tabs = collabCan('team') ? ['成员与权限', '工作负荷', '调度计划', '活动记录', '接口与费用', '出片API'] : ['工作负荷', '调度计划'];
+  const tabs = collabCan('team') ? ['成员与权限', '工作负荷', '调度计划', '活动记录', '接口与费用', '出片API', '团队列表', '打标统计', '团队费用'] : ['工作负荷', '调度计划'];
   if (!tabs.includes(collabUi.teamTab)) collabUi.teamTab = tabs[0];
   return `${headline('团队与生产管理', '组织范围、人员工作量与上游并发分开管理', collabCan('team') && collabUi.teamTab === '成员与权限' ? button('添加演示成员', 'collab-add-member', 'primary') : '')}
     <div class="tabs">${tabs.map(tab => `<button class="${collabUi.teamTab === tab ? 'active' : ''}" data-action="collab-team-tab" data-value="${tab}">${tab}</button>`).join('')}</div>
@@ -429,7 +432,7 @@ function collabRouteAllowed(view) {
 }
 function collabHeaderMarkup() {
   const store = collabState(); const actor = collabActor();
-  const unread = store.notifications.filter(notice => notice.memberId === actor.id && !notice.read).length;
+  const unread = store.notifications.filter(notice => notice.memberId === actor.id && !notice.read && collabNoticeVisible(notice)).length;
   return `${store.demoLoaded ? `<label class="collab-persona">演示身份<select id="collabPersona" class="input" aria-label="切换演示身份">${store.members.filter(member => member.active).map(member => `<option value="${member.id}" ${member.id === actor.id ? 'selected' : ''}>${escapeText(member.name)} · ${collabRoles[member.role].name}</option>`).join('')}</select></label>` : ''}<button class="btn ghost sm" data-action="collab-notifications">我的通知${unread ? ` ${unread}` : ''}</button>`;
 }
 function collabAfterRender() {
@@ -624,8 +627,8 @@ document.addEventListener('click', event => {
       persist(); render(); break;
     }
     case 'collab-notifications': {
-      const notices = collabState().notifications.filter(notice => notice.memberId === collabActor().id && collabVisible(collabCampaign(notice.campaignId)));
-      openModal('我的通知', notices.length ? `<div class="stack">${notices.slice(0, 40).map(notice => `<div class="draft-row"><div class="grow"><strong>${escapeText(notice.message)}</strong><p class="meta">${notice.read ? '已读' : '未读'} · ${escapeText(new Date(notice.at).toLocaleString('zh-CN'))}</p></div>${button('查看项目', 'collab-open-project', 'sm', `data-id="${notice.campaignId}"`)}</div>`).join('')}</div>${button('全部标为已读', 'collab-read-notices', 'mt')}` : '<p class="meta">暂无需要你处理的通知</p>', true); break;
+      const notices = collabState().notifications.filter(notice => notice.memberId === collabActor().id && collabNoticeVisible(notice));
+      openModal('我的通知', notices.length ? `<div class="stack">${notices.slice(0, 40).map(notice => `<div class="draft-row"><div class="grow"><strong>${escapeText(notice.message)}</strong><p class="meta">${notice.read ? '已读' : '未读'} · ${escapeText(new Date(notice.at).toLocaleString('zh-CN'))}</p></div>${notice.read ? '' : button('标为已读', 'feature-notice-read', 'ghost sm', `data-id="${notice.id}"`)}${notice.campaignId ? button('查看项目', 'collab-open-project', 'sm', `data-id="${notice.campaignId}"`) : button('查看素材', 'nav', 'sm', 'data-view="labels"')}</div>`).join('')}</div>${button('全部标为已读', 'collab-read-notices', 'mt')}` : '<p class="meta">暂无需要你处理的通知</p>', true); break;
     }
     case 'collab-read-notices': collabState().notifications.filter(notice => notice.memberId === collabActor().id).forEach(notice => { notice.read = true; }); persist(); closeModal(); render(); break;
     case 'collab-demo-conflict': {

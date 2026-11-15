@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const suites = ['preview-server', 'ui-layout', 'production-flow', 'production-guardrails', 'reference-variants', 'workspace', 'collaboration', 'production-offline', 'generation-ui', 'analytics', 'media-export'];
+const suites = ['preview-server', 'ui-layout', 'production-flow', 'production-guardrails', 'reference-variants', 'workspace', 'collaboration', 'production-offline', 'generation-ui', 'analytics', 'media-export', 'team-features', 'video-learning', 'custom-select'];
 
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xinliu-regression-'));

@@ -31,8 +31,8 @@ async function main() {
     page.setDefaultTimeout(10000);
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin + '/#home');
-    assert.match(await page.title(), /心流/);
-    assert.equal(await page.locator('.brandmark span').first().innerText(), '心流');
+    assert.match(await page.title(), /光影云/);
+    assert.equal(await page.locator('.brandmark span').first().innerText(), '光影云');
     await page.getByRole('button', { name: '直接做视频' }).click();
     await page.locator('#draftMedia').setInputFiles({ name: 'new-product.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') });
     await page.waitForFunction(() => product().name === 'new-product.png');
@@ -88,7 +88,7 @@ async function main() {
     assert.equal(await page.evaluate(() => flowProject().history[0].config.duration), 10);
     assert.equal(creates, 1);
     assert.deepEqual(errors, []);
-    const report = { status: 'passed', checks: ['心流名称', '默认4秒480p无声单镜', '新商品不继承旧SKU', '多个已选商品参考传给模型且不包含未选素材', '短片规格保留历史并要求重新确认', '真实服务端素材上传', '报价不调用模型', '未授权不提交', '授权后一次模拟调用', '查单不重生成', '结果转存回到对应作品', '无页面错误'], authority: '仅本地HTTP模拟供应商；不证明Seedance出片效果，不消耗真实模型积分', fixtureCalls: creates, pageErrors: errors };
+    const report = { status: 'passed', checks: ['光影云名称', '默认4秒480p无声单镜', '新商品不继承旧SKU', '多个已选商品参考传给模型且不包含未选素材', '短片规格保留历史并要求重新确认', '真实服务端素材上传', '报价不调用模型', '未授权不提交', '授权后一次模拟调用', '查单不重生成', '结果转存回到对应作品', '无页面错误'], authority: '仅本地HTTP模拟供应商；不证明Seedance出片效果，不消耗真实模型积分', fixtureCalls: creates, pageErrors: errors };
     fs.writeFileSync(path.join(root, '出片接口联调验证.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report, null, 2));
   } finally {
     await browser.close(); await backend.close(); await new Promise(resolve => fixture.close(resolve)); delete process.env.XINLIU_UI_FIXTURE_KEY;

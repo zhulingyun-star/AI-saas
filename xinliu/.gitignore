@@ -10,6 +10,7 @@ backend/provider.local.json
 *.log
 *.tmp
 work/test-results/
+work/review-data/
 outputs/production-workbench/*.png
 outputs/production-workbench/*.json
 outputs/production-workbench/*.zip

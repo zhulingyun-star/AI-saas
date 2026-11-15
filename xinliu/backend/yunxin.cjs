@@ -13,7 +13,8 @@ function providersFromEnvironment() {
   const text = {
     id: 'yunxin', protocol: 'gemini-content', baseUrl: textBase.origin,
     createPath: textBase.pathname.replace(/\/$/, '') + '/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
-    keyEnv: 'YUNXIN_TEXT_KEY', model, maxOutputTokens: 4096, supportsImageDataUri: true
+    keyEnv: 'YUNXIN_TEXT_KEY', model, maxOutputTokens: 4096, supportsImageDataUri: true,
+    supportsVideoDataUri: process.env.YUNXIN_VIDEO_ANALYSIS_INLINE === 'true', maxInlineVideoBytes: 16 * 1024 * 1024
   };
   return {
     text: { ...text, price: { fixedCredits: numberFromEnvironment('YUNXIN_TEXT_ESTIMATE_CREDITS'), source: 'lightshadow业务积分估价，非供应商实际结算' } },
@@ -40,6 +41,11 @@ function providersFromEnvironment() {
 
 function geminiPayload(task, provider, assets) {
   const parts = [{ text: task.prompt }];
+  if (task.kind === 'vision' && task.input?.config?.videoAnalysis === true) for (const asset of assets.filter(item => item.role === 'reference_video')) {
+    const inline = /^data:(video\/[^;]+);base64,([\s\S]+)$/.exec(asset.url);
+    if (!inline) throw new Error('视频理解必须是服务端校验后的inline视频');
+    parts.push({ inline_data: { mime_type: inline[1], data: inline[2] } });
+  }
   if (task.kind === 'vision') for (const asset of assets.filter(item => item.role.endsWith('_image'))) {
     const inline = /^data:([^;]+);base64,([\s\S]+)$/.exec(asset.url);
     parts.push(inline ? { inline_data: { mime_type: inline[1], data: inline[2] } } : { file_data: { file_uri: asset.url } });

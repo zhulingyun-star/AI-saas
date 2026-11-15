@@ -1,6 +1,6 @@
 {
   "openapi": "3.1.0",
-  "info": { "title": "心流本地出片联调 API", "version": "1.0.0", "description": "回环地址单操作者联调，不是生产多租户登录。创建任务和报价不生成；submit需明确费用授权。视频供应商采用可配置的xinliu-bridge请求/响应契约，不能把示例路径当成Seedance官方路径。" },
+  "info": { "title": "光影云本地出片联调 API", "version": "1.1.0", "description": "回环地址单操作者联调，不是生产多租户登录。创建任务和报价不生成；submit需明确费用授权。视频供应商采用可配置的xinliu-bridge请求/响应契约，不能把示例路径当成Seedance官方路径。任务input.config可保存teamId归属快照；vision视频分析可设置videoAnalysis=true并提供reference_video，本地文件inline需供应商显式支持且不超过16MB。团队归属不是服务端租户鉴权。" },
   "servers": [{ "url": "http://127.0.0.1:8767" }],
   "paths": {
     "/api/health": { "get": { "summary": "服务健康，无模型请求", "responses": { "200": { "description": "本地服务与配置状态" } } } },

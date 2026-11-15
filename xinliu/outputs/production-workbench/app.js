@@ -37,7 +37,7 @@ const headline = (title, subtitle, controls = '') => {
   return `<div class="page-head"><div><h1>${title}</h1>${subtitle && !contextOnly.includes(title) ? `<p>${subtitle}</p>` : ''}</div><div class="row wrap gap8">${controls}</div></div>`;
 };
 const emptyState = (title, description, controls = '') => `<div class="card empty">${icon('folder')}<h2>${title}</h2><p>${description}</p><div class="row wrap gap8">${controls}</div></div>`;
-const titleMarkup = () => `<a href="#home" class="brandmark">${icon('film')}<span>心流</span></a>`;
+const titleMarkup = () => `<a href="#home" class="brandmark">${icon('film')}<span>光影云</span></a>`;
 
 const categories = {
   '服饰鞋包': { formats: ['真人口播', '上身试穿', '场景穿搭', '细节演示', '多款混剪', '直播切片', '参考片改编', '剧情种草', '商品转台'], claims: ['版型', '上身效果', '面料细节', '搭配场景', '尺码与体型'], evidence: ['正侧背展示', '面料近景', '活动动作', '真实试穿素材'], style: '上身试穿', model: 'lin', product: 'coat' },
@@ -415,14 +415,21 @@ function compilePrompt(config=state.config,shots=getShots()) {
 function render() {
   stopPreview();
   collabState();
+  XLTeam.initialize();
   for(const [clientId,current] of Object.entries(state.clients)){
     if(collabClientAllowed(clientId))current.projects.filter(work=>!work.campaignId).forEach(work=>collabRegisterWork(work,clientId));
   }
   const defaultView=state.startView==='队列优先'?'queue':state.startView==='制作优先'?'home':['owner','admin','lead'].includes(collabActor().role)?'projects':'tasks';
   const view=(location.hash|| '#'+defaultView).slice(1).split('?')[0];
   viewState.view=view;
-  const routes={home:flowHome,projects:collabPortfolio,tasks:collabTasks,runs:collabRuns,project:collabProjectDetail,deliveries:collabGuest,gallery:flowGallery,quick:flowQuick,brief:flowBrief,result:flowResult,drama:flowDrama,studio:workspaceStudio,batch:workspaceBatch,queue:workspaceQueue,review:reviewPage,resources:workspaceResources,assets:workspaceResources,models:workspaceResources,wardrobe:workspaceResources,voices:workspaceResources,reference:workspaceResources,preferences:flowKnowledge,data:dataPage,settings:collabTeam};
+  const routes={home:flowHome,labels:featureAssetList,hotspots:hotspotPage,projects:collabPortfolio,tasks:collabTasks,runs:collabRuns,project:collabProjectDetail,deliveries:collabGuest,gallery:flowGallery,quick:flowQuick,brief:flowBrief,result:flowResult,drama:flowDrama,studio:workspaceStudio,batch:workspaceBatch,queue:workspaceQueue,review:reviewPage,resources:workspaceResources,assets:workspaceResources,models:workspaceResources,wardrobe:workspaceResources,voices:workspaceResources,reference:workspaceResources,preferences:flowKnowledge,data:dataPage,settings:collabTeam};
   const allowed=collabRouteAllowed(view);
+  if(view!=='login'&&collabActor().role!=='guest'&&!teamContextAvailable()){
+    app.innerHTML=workspaceShell(view,teamEmptyPage());
+    featureAfterRender();
+    enhanceSelects();
+    return;
+  }
   const route=view==='home'&&['maker','reviewer'].includes(collabActor().role)?collabTasks:routes[view]||workspaceQueue;
   app.innerHTML=view==='login'?loginPage():workspaceShell(view,collabActor().role==='guest'?collabGuest():allowed?route():collabDenied());
   bindForms();
@@ -436,6 +443,8 @@ function render() {
   if (allowed && collabActor().role !== 'guest') referenceAfterRender();
   if (allowed && collabActor().role !== 'guest') generationAfterRender();
   if (view !== 'login') uiLayoutAfterRender();
+  if (view !== 'login' && collabActor().role!=='guest') featureAfterRender();
+  enhanceSelects();
 }
 function navigate(view) { closeModal(); if(location.hash==='#'+view)render();else location.hash=view; }
 function openModal(title,body,large=false) {
@@ -444,7 +453,8 @@ function openModal(title,body,large=false) {
   overlay.innerHTML=`<div class="modal-backdrop"><section class="modal ${large?'large':''}" role="dialog" aria-modal="true" aria-label="${escapeText(title)}"><div class="modal-head"><h2>${title}</h2><button class="close" data-action="close-modal" aria-label="关闭">×</button></div><div class="modal-body">${body}</div></section></div>`;
   bindForms();
   hydrateFiles();
-  setTimeout(()=>overlay.querySelector('input,select,button')?.focus(),20);
+  enhanceSelects(overlay);
+  setTimeout(()=>{if(!overlay.contains(document.activeElement))[...overlay.querySelectorAll('input,select,button')].find(element=>!element.disabled&&element.tabIndex>=0&&element.getClientRects().length)?.focus();},20);
 }
 function closeModal() {
   overlay.innerHTML='';
@@ -836,7 +846,7 @@ document.addEventListener('input',event=>{
 });
 document.addEventListener('keydown',event=>{
   if(event.key==='Escape'){closeModal();return;}
-  if(event.key==='Tab'&&viewState.modal){const elements=[...overlay.querySelectorAll('button,input,select,textarea,a')].filter(item=>!item.disabled);const first=elements[0],last=elements.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}
+  if(event.key==='Tab'&&viewState.modal){const elements=[...overlay.querySelectorAll('button,input,select,textarea,a')].filter(item=>!item.disabled&&item.tabIndex>=0&&item.getClientRects().length);const first=elements[0],last=elements.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}
 });
 function saveDraftIfNeeded(){if(['studio','quick','brief','drama','result'].includes(viewState.view)&&collabCan('edit'))saveDraft();}
 

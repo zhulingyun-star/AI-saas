@@ -15,6 +15,7 @@
 **/*credentials.local.*
 **/provider.local.json
 **/test-results
+**/review-data
 **/playwright-report
 production-workbench
 shangzhen-*.png

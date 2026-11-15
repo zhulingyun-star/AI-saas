@@ -1,5 +1,16 @@
 # 模型供应商配置
 
+## 2026-11-16 视频理解补充
+
+光影云新增“客户知识 → 素材提炼 → 视频AI提炼”，使用独立的 `vision` provider，不借用视频生成凭据。以下段落的历史真实调用记录不是本次审核副本的配置状态；审核服务明确使用 `providers: {}`，不会调用真实模型。
+
+- `gemini-content` 协议、模型权限、密钥及 `price.fixedCredits` 或相应环境估价必须有效。
+- 默认不开放视频inline。供应商确实接受视频inline后，Yunxin可设置 `YUNXIN_VIDEO_ANALYSIS_INLINE=true`；自定义provider需 `supportsVideoDataUri: true`，可选更低的 `maxInlineVideoBytes`，系统硬上限16MB。
+- 仅使用已上传本地文件生成 `inline_data`，不把blob URL或任意公网URL冒充Gemini File API返回的fileUri。普通视频生成参考URL规则保持不变。
+- 单次选择1–5条已评价视频，先核对授权，再上传与准备报价，再确认总估价与本次费用授权，逐条执行；任一状态不确定停止后续，不自动重发。
+- 返回内容保存知识草稿，需人工核对并发布、明确选用版本。截断、空答和非成功返回不作为有效知识。
+- 输入 `config.teamId` 固定到任务快照，用于估价记录归属；没有该字段的历史任务不自动归入当前团队。不提供团队钱包或真实供应商结算。
+
 `providers.cjs` 负责按用途选供应商；`yunxin.cjs` 与 `silvamux.cjs` 各自定义地址、模型、凭据变量与估价。`ark-video.cjs` 仅共享视频协议的数据结构，不共享凭据或渠道选择。
 
 ## 切换
