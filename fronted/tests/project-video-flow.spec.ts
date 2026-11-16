@@ -39,6 +39,28 @@ test('mode cards open framework and one-click setup as separate production modes
   await expect(dialog.getByRole('link',{name:/视频二创模式/})).toBeVisible();
 });
 
+test('choosing a production mode proceeds to setup without showing both mode choices again', async ({ page }) => {
+  await page.route('**/api/**',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    const json=(value:unknown)=>route.fulfill({json:value});
+    if(path==='/api/auth/me')return json({username:'admin'});
+    if(path.endsWith('/auth/csrf'))return json({token:'test',headerName:'X-CSRF-TOKEN'});
+    if(path==='/api/clients')return json([{id:'c',name:'客户',category:'服饰鞋包'}]);
+    if(path==='/api/system')return json({aiMode:'openai',videoProviderConnected:true});
+    if(path.endsWith('/campaigns'))return json([{id:'campaign-1',name:'鞋类项目',ownerName:'admin',brief:'',archived:false,workCount:0,deliveredCount:0,targetCount:1,revision:0}]);
+    if(path.endsWith('/campaigns/campaign-1/products'))return json({revision:0,products:[{anchorId:'shoe',assets:[{id:'shoe',name:'鞋.png',mime:'image/png',metadata:{productName:'灰白运动鞋',productGroupId:'shoe'}}],analysis:{}}]});
+    if(path.endsWith('/assets'))return json([{id:'shoe',name:'鞋.png',kind:'PRODUCT',mime:'image/png',metadata:{productName:'灰白运动鞋',productGroupId:'shoe'}}]);
+    return json([]);
+  });
+  await page.goto('/projects/campaign-1');
+  await page.getByRole('button',{name:'在此项目做视频',exact:true}).click();
+  await page.getByRole('link',{name:/框架模式/}).click();
+  await expect(page).toHaveURL('/projects/campaign-1/ecommerce?mode=framework');
+  await expect(page.getByText('鞋类项目 · 框架模式')).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'电商视频制作模式'})).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'框架模式 · 选择商品'})).toBeVisible();
+});
+
 test('framework mode saves the selected framework then opens editable shots', async ({ page }) => {
   let project:any=null;
   const product={id:'shoe',clientId:'c',name:'鞋子.png',kind:'PRODUCT',sku:'NB',tags:'',mime:'image/png',sizeBytes:20,metadata:{productName:'灰白运动鞋',productGroupId:'shoes'},createdAt:'2026-11-15'};

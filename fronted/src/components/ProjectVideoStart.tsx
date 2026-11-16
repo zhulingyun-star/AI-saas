@@ -32,7 +32,7 @@ export default function ProjectVideoStart({ campaign, remake, productionMode = '
   if (campaign.archived) return <p className="hint">此项目已归档。可在项目设置中恢复后继续创建视频。</p>;
   return <section className="panel project-video-start" id="project-video-start">
     {!remake && <div className="project-flow"><span>① 建立项目</span><strong>② 选择商品与核对资料</strong><span>③ 视频方案与分镜</span><span>④ 生成视频</span><span>⑤ 审片交付</span></div>}
-    <h2>{remake ? '选择二创商品并创建分镜' : '为此项目创建一条视频'}</h2>
+    <h2>{remake ? '选择二创商品并创建分镜' : productionMode === 'FRAMEWORK' ? '框架模式 · 选择商品' : '一键成片 · 选择商品'}</h2>
     <p className="muted">选择商品，核对本条视频能使用的事实。下一步直接进入制作，作品自动归入当前项目。</p>
     {assets.isPending ? <Loading /> : assets.error ? <ErrorState error={assets.error} /> : !groups.length ?
       <div className="hint">还没有商品。<Link className="button" to={`/assets?campaign=${campaign.id}`}>先上传商品素材</Link></div> : <>

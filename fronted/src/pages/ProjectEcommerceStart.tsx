@@ -13,13 +13,9 @@ export default function ProjectEcommerceStart() {
   if (!campaign) return <Empty title="交付项目不存在" description="返回项目总览重新打开。" />;
   const mode = params.get('mode') === 'one-click' ? 'ONE_CLICK' : 'FRAMEWORK';
   return <>
-    <Header title="电商短视频" description={campaign.name}>
+    <Header title="电商短视频" description={`${campaign.name} · ${mode === 'FRAMEWORK' ? '框架模式' : '一键成片'}`}>
       <Link className="button" to={`/projects/${id}`}>返回项目</Link>
     </Header>
-    <nav className="project-flow" aria-label="电商视频制作模式">
-      <Link className={`button ${mode === 'FRAMEWORK' ? 'primary' : ''}`} to={`/projects/${id}/ecommerce?mode=framework`}>框架模式</Link>
-      <Link className={`button ${mode === 'ONE_CLICK' ? 'primary' : ''}`} to={`/projects/${id}/ecommerce?mode=one-click`}>一键成片</Link>
-    </nav>
     <ProjectVideoStart key={`${id}:${mode}`} campaign={campaign} productionMode={mode} />
   </>;
 }
