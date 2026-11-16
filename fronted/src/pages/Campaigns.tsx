@@ -221,6 +221,8 @@ export function CampaignDetail() {
         <div className="creation-mode-options">
           <div className="creation-mode-card is-pending"><h3>剧情模式</h3><p>围绕人物、情节和商品设计原创故事。</p><span className="pill">后续开放</span></div>
           <Link className="creation-mode-card" to={`/projects/${campaign.id}/remake`}><h3>视频二创模式</h3><p>选择参考视频 → 拆解画面结构 → 替换为当前商品 → 分镜制作。</p><strong>开始视频二创 →</strong></Link>
+          <Link className="creation-mode-card" to={`/projects/${campaign.id}/ecommerce?mode=framework`}><h3>框架模式</h3><p>生成多种创作框架，选定后再确认分镜与商品事实。</p><strong>开始框架创作 →</strong></Link>
+          <Link className="creation-mode-card" to={`/projects/${campaign.id}/ecommerce?mode=one-click`}><h3>一键成片</h3><p>确认商品资料和费用后，自动生成方案并提交视频任务。</p><strong>开始一键成片 →</strong></Link>
         </div>
       </Modal>}
     </>

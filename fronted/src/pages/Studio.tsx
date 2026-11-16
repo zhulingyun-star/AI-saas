@@ -39,6 +39,8 @@ export default function Studio() {
   const [activeShot, setActiveShot] = useState(0);
   const [provider, setProvider] = useState('LOCAL');
   const [notice, setNotice] = useState('');
+  const [frameworks, setFrameworks] = useState<{id:string;title:string;hook:string;structure:string;proof:string;closing:string}[]>([]);
+  const [frameworkBusy, setFrameworkBusy] = useState(false);
   const [variants, setVariants] = useState(false);
   const hydrated = useRef('');
   const data = useQuery({
@@ -58,6 +60,7 @@ export default function Studio() {
       hydrated.current = data.data.id;
       setForm(data.data);
       setStage(data.data.shots.length ? 1 : 0);
+      setFrameworks(Array.isArray(data.data.config.frameworkOptions) ? data.data.config.frameworkOptions as typeof frameworks : []);
     }
   }, [data.data]);
   useEffect(() => {
@@ -128,6 +131,22 @@ export default function Studio() {
     setForm(saved);
     cache.setQueryData([client.id, 'project', p.id], saved);
     setNotice(result.notice);
+  }
+  async function loadFrameworks() {
+    setFrameworkBusy(true);
+    try {
+      const saved=await save();
+      const result=await post<typeof frameworks>(`/clients/${client.id}/projects/${id}/frameworks`,{});
+      const withOptions=await put<Project>(`/clients/${client.id}/projects/${id}`,{...saved,config:{...saved.config,frameworkOptions:result}});
+      setForm(withOptions);cache.setQueryData([client.id,'project',id],withOptions);
+      setFrameworks(result);
+    } finally { setFrameworkBusy(false); }
+  }
+  async function chooseFramework(option: typeof frameworks[number]) {
+    const config={...form.config,selectedFramework:option};
+    const p=await put<Project>(`/clients/${client.id}/projects/${id}`,{...form,config});
+    setForm(p);cache.setQueryData([client.id,'project',id],p);await cache.invalidateQueries({queryKey:[client.id,'projects']});
+    await draft(p);setStage(1);
   }
   const edit = editing === null ? null : form.shots[editing];
   if (id && data.isPending) return <Loading />;
@@ -305,6 +324,11 @@ export default function Studio() {
                 />
                 商品资料与参考授权已核对
               </label>
+              {form.config.creationMode === 'ECOMMERCE_VIDEO' && form.config.productionMode === 'FRAMEWORK' && <section className="ecommerce-frameworks" aria-label="创作框架">
+                <div className="row between"><h2>选择创作框架</h2><button disabled={frameworkBusy || !form.factsConfirmed} onClick={() => void action.run(loadFrameworks)}>{frameworkBusy ? '正在生成…' : system.data?.aiMode === 'openai' ? frameworks.length ? '重新生成框架' : '生成创作框架' : '查看预设框架'}</button></div>
+                {system.data?.aiMode !== 'openai' && <p className="caption">文字模型未启用，下面是固定的本地预设框架，不是 AI 生成结果。</p>}
+                {frameworks.map(option=><article className="ecommerce-framework-option" key={option.id}><h3>{option.title}</h3><p>{option.hook}</p><p>{option.structure}</p><p><strong>商品证明：</strong>{option.proof}</p><p><strong>收尾：</strong>{option.closing}</p><button className="primary" disabled={action.busy || !form.factsConfirmed} onClick={()=>void action.run(()=>chooseFramework(option))}>{form.config.selectedFramework && (form.config.selectedFramework as {id:string}).id===option.id?'使用此框架并生成分镜':'选择此框架并生成分镜'}</button></article>)}
+              </section>}
               <details>
                 <summary>出镜、声音与后期</summary>
                 <div className="form-grid">
@@ -345,7 +369,7 @@ export default function Studio() {
                 <Link to="/assets" className="button">
                   上传商品素材
                 </Link>
-                <button
+                {!(form.config.creationMode === 'ECOMMERCE_VIDEO' && form.config.productionMode === 'FRAMEWORK') && <button
                   className="primary"
                   disabled={action.busy || !form.factsConfirmed}
                   onClick={() =>
@@ -357,7 +381,7 @@ export default function Studio() {
                   }
                 >
                   {form.shots.length ? '查看已有方案' : '生成本条分镜方案'}
-                </button>
+                </button>}
               </div>
               {!form.shots.length && <p className="caption">{system.data?.aiMode === 'openai' ? '生成方案会调用当前文字模型，使用模型额度；不会提交视频生成。' : '按本地规则生成分镜草稿。'}</p>}
             </>

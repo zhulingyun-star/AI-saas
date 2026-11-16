@@ -20,6 +20,66 @@ test('video remake works reopen the reference workflow while regular works stay 
   expect(workDestination(work, [{ id: 'work-1', config: {} } as any])).toBe('/studio/work-1');
 });
 
+test('mode cards open framework and one-click setup as separate production modes', async ({ page }) => {
+  await page.route('**/api/**', async route => {
+    const path=new URL(route.request().url()).pathname;
+    const json=(value: unknown)=>route.fulfill({json:value});
+    if(path==='/api/auth/me')return json({username:'admin'});
+    if(path.endsWith('/auth/csrf'))return json({token:'test',headerName:'X-CSRF-TOKEN'});
+    if(path==='/api/clients')return json([{id:'c',name:'客户',category:'服饰鞋包'}]);
+    if(path.endsWith('/campaigns'))return json([{id:'campaign-1',name:'鞋类项目',ownerName:'admin',brief:'',archived:false,workCount:0,deliveredCount:0,targetCount:1,revision:0}]);
+    if(path.endsWith('/campaigns/campaign-1/products'))return json({revision:0,products:[{anchorId:'a',assets:[{id:'a',name:'鞋子.png',mime:'image/png',metadata:{productName:'测试鞋'}}],analysis:{}}]});
+    return json([]);
+  });
+  await page.goto('/projects/campaign-1');
+  await page.getByRole('button',{name:'在此项目做视频',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await expect(dialog.getByRole('link',{name:/框架模式/})).toHaveAttribute('href','/projects/campaign-1/ecommerce?mode=framework');
+  await expect(dialog.getByRole('link',{name:/一键成片/})).toHaveAttribute('href','/projects/campaign-1/ecommerce?mode=one-click');
+  await expect(dialog.getByRole('link',{name:/视频二创模式/})).toBeVisible();
+});
+
+test('framework mode saves the selected framework then opens editable shots', async ({ page }) => {
+  let project:any=null;
+  const product={id:'shoe',clientId:'c',name:'鞋子.png',kind:'PRODUCT',sku:'NB',tags:'',mime:'image/png',sizeBytes:20,metadata:{productName:'灰白运动鞋',productGroupId:'shoes'},createdAt:'2026-11-15'};
+  await page.route('**/api/**',async route=>{
+    const path=new URL(route.request().url()).pathname, method=route.request().method();
+    const json=(value:unknown)=>route.fulfill({json:value});
+    if(path==='/api/auth/me')return json({username:'admin'});
+    if(path.endsWith('/auth/csrf'))return json({token:'test',headerName:'X-CSRF-TOKEN'});
+    if(path==='/api/clients')return json([{id:'c',name:'客户',category:'服饰鞋包'}]);
+    if(path==='/api/system')return json({aiMode:'openai',videoProviderConnected:false,videoModel:'test'});
+    if(path.endsWith('/campaigns'))return json([{id:'campaign-1',name:'鞋类项目',ownerName:'admin',brief:'',archived:false,workCount:0,deliveredCount:0,targetCount:1,revision:0}]);
+    if(path.endsWith('/campaigns/campaign-1/products'))return json({revision:0,products:[{anchorId:'shoe',assets:[product],analysis:{}}]});
+    if(path.endsWith('/assets'))return json([product]);
+    if(path.endsWith('/product-groups/shoe/analysis'))return json({status:'COMPLETED',stale:false,revision:2,report:{appearance:'灰白网眼拼接'}});
+    if(path.endsWith('/assets/shoe/file'))return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"/>'});
+    if(path.endsWith('/projects')&&method==='POST'){project={...route.request().postDataJSON(),id:'ecom-1',clientId:'c',status:'DRAFT',revision:0};return json(project);}
+    if(path.endsWith('/projects/ecom-1/frameworks'))return json([{id:'proof',title:'细节证据',hook:'先看鞋面拼接',structure:'整体到局部再上脚',proof:'可见鞋面与鞋底',closing:'查看商品详情'},{id:'scene',title:'通勤场景',hook:'出门选鞋',structure:'通勤穿搭展示',proof:'真实上脚效果',closing:'查看详情'},{id:'style',title:'穿搭变化',hook:'同一条裤子的搭配',structure:'正侧面切换',proof:'鞋型和配色',closing:'查看详情'}]);
+    if(path.endsWith('/projects/ecom-1')){if(method==='PUT')project={...project,...route.request().postDataJSON(),revision:project.revision+1};return json(project);}
+    if(path.endsWith('/projects/ecom-1/draft'))return json({shots:[{duration:15,visual:'近景展示鞋面网眼和灰白拼接',narration:'灰白配色，日常好搭',assetId:null,startAt:0,locked:false}],notice:'已按所选框架生成'});
+    if(path.endsWith('/jobs'))return json([]);
+    return json([]);
+  });
+  await page.goto('/projects/campaign-1/ecommerce?mode=framework');
+  await page.getByRole('button',{name:/灰白运动鞋/}).click();
+  await page.getByLabel('本条视频的商品事实').fill('灰白拼色，网眼鞋面，信息以实物为准');
+  await page.getByLabel('已核对以上事实和素材使用权').check();
+  await page.getByRole('button',{name:'创建作品，选择创作框架'}).click();
+  await expect(page).toHaveURL(/\/studio\/ecom-1\?framework=1$/);
+  await page.getByRole('button',{name:'生成创作框架'}).click();
+  await expect(page.getByRole('heading',{name:'细节证据',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'选择此框架并生成分镜'}).first().click();
+  await expect(page.getByRole('heading',{name:'拍摄方案',exact:true})).toBeVisible();
+  expect(project.config.productionMode).toBe('FRAMEWORK');
+  expect(project.config.selectedFramework.title).toBe('细节证据');
+  expect(project.config.frameworkOptions).toHaveLength(3);
+  await page.reload();
+  await page.getByRole('button',{name:'商品 / 角色'}).click();
+  await expect(page.getByRole('heading',{name:'细节证据',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'使用此框架并生成分镜'})).toBeVisible();
+});
+
 test('create campaign → select product → verify facts → remake shots → scoped queue', async ({ page }, testInfo) => {
   let campaigns: Record<string, unknown>[] = [];
   let work: any = null;

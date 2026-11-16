@@ -18,6 +18,7 @@ public final class Models {
         @NotBlank @Size(max=8000) String facts, boolean factsConfirmed,
         @NotNull @Size(max=20) List<@Valid Shot> shots,
         @NotNull Map<String, Object> config, @Min(0) int revision) {}
+    public record OneClickStart(@NotNull @Valid ProjectInput project, boolean confirmed) {}
     public record Project(String id, String clientId, String name, String sku, String category, String platform,
         String format, int duration, String facts, boolean factsConfirmed, List<Shot> shots,
         Map<String, Object> config, String status, int revision, LocalDateTime createdAt, LocalDateTime updatedAt) {}

@@ -11,7 +11,8 @@ import static com.shangzhen.workbench.Models.*;
 public class ProjectService {
     private final Store s;
     private final VideoApiClient video;
-    public ProjectService(Store s, VideoApiClient video) {this.s=s;this.video=video;}
+    private final AiService ai;
+    public ProjectService(Store s, VideoApiClient video, AiService ai) {this.s=s;this.video=video;this.ai=ai;}
     void validate(String client,ProjectInput p) {
         if(p.shots().size()>0 && p.shots().stream().mapToInt(Shot::duration).sum()!=p.duration()) throw Store.bad("镜头总时长必须等于成片时长");
         if(s.write(p.config()).length()>10000) throw Store.bad("制作配置过长");
@@ -30,6 +31,37 @@ public class ProjectService {
         if(campaignId!=null&&s.db.queryForObject("SELECT COUNT(*) FROM campaigns WHERE client_id=? AND id=? AND archived=FALSE",Integer.class,client,campaignId)==0)throw Store.bad("交付项目不存在或已归档");
         s.db.update("INSERT INTO work_flow VALUES(?,?,?,?,?,?,?,?)",id,campaignId,user,p.shots().isEmpty()?"PLAN":"PRODUCTION",null,"",0,now);
         s.audit(client,user,"创建作品",p.name()); return s.project(client,id);
+    }
+    @Transactional public Map<String,Object> startOneClick(String client,String user,ProjectInput input){
+        if(!input.factsConfirmed()||input.facts().isBlank())throw Store.bad("请先确认商品事实");
+        if(!ai.enabled())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"文字模型未配置；尚未创建任务");
+        if(!video.enabled())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"视频供应商未启用；尚未创建任务");
+        if(!"ECOMMERCE_VIDEO".equals(input.config().get("creationMode"))||!"ONE_CLICK".equals(input.config().get("productionMode")))throw Store.bad("一键成片模式标记无效");
+        if(!input.shots().isEmpty())throw Store.bad("一键成片必须从空分镜草稿开始");
+        List<String> imageIds=productImages(input.config());if(imageIds.isEmpty()||imageIds.size()>30)throw Store.bad("一键成片需要1至30张商品图片");
+        for(String id:imageIds)if(!s.asset(client,id).mime().startsWith("image/"))throw Store.bad("一键成片参考素材必须是图片");
+        Project project=create(client,user,input);
+        s.db.queryForObject("SELECT id FROM clients WHERE id=? FOR UPDATE",String.class,client);
+        String id=Store.id();var now=Store.now();
+        s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at) VALUES(?,?,?,?,?,'QUEUED',0,?,?,NULL,1,?,?)",id,client,project.id(),project.name(),"VIDEO_API",s.write(project),"已确认费用，等待自动生成框架与分镜",now,now);
+        s.audit(client,user,"提交一键成片",project.name()+" / AI方案 + 视频生成");
+        return Map.of("project",project,"job",s.job(client,id));
+    }
+    private List<String> productImages(Map<String,Object> config){Object raw=config.get("productAssetIds");if(!(raw instanceof List<?> ids))return List.of();return ids.stream().map(Object::toString).distinct().toList();}
+    @Transactional public Project prepareOneClick(String jobId,Project snapshot){
+        Project current=s.project(snapshot.clientId(),snapshot.id());if(current.revision()!=snapshot.revision())throw new ResponseStatusException(HttpStatus.CONFLICT,"作品已修改；一键任务未覆盖用户修改");
+        s.db.update("UPDATE jobs SET progress=15,message='正在生成创作框架与分镜',updated_at=? WHERE id=? AND status='RUNNING'",Store.now(),jobId);
+        AiService.OneClickDraft generated=ai.oneClickDraft(current);
+        List<String> images=productImages(current.config());List<Shot> shots=new ArrayList<>();
+        for(int i=0;i<generated.shots().size();i++){AiService.DraftShot shot=generated.shots().get(i);shots.add(new Shot(shot.duration(),shot.visual(),shot.narration(),images.get(i%images.size()),0,false));}
+        Map<String,Object> config=new LinkedHashMap<>(current.config());config.put("creativeFramework",Map.of("title",generated.frameworkTitle(),"summary",generated.frameworkSummary()));
+        var now=Store.now();
+        int updated=s.db.update("UPDATE projects SET shots=?,config=?,status='SCRIPT_READY',revision=revision+1,updated_at=? WHERE client_id=? AND id=? AND revision=?",s.write(shots),s.write(config),now,current.clientId(),current.id(),current.revision());
+        if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"作品已修改；自动生成未覆盖用户修改");
+        s.db.update("UPDATE work_flow SET phase='PRODUCTION',revision=revision+1,updated_at=? WHERE project_id=?",now,current.id());
+        Project ready=s.project(current.clientId(),current.id());
+        s.db.update("UPDATE jobs SET snapshot=?,progress=35,message=?,updated_at=? WHERE id=? AND status='RUNNING'",s.write(ready),"创作框架与"+shots.size()+"镜分镜已完成；正在准备商品图片",Store.now(),jobId);
+        return ready;
     }
     @Transactional public Project update(String client,String id,String user,ProjectInput p) {
         validate(client,p);

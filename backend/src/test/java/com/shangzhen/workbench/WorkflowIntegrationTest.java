@@ -49,6 +49,19 @@ class WorkflowIntegrationTest {
   mvc.perform(get("/api/auth/me").session((org.springframework.mock.web.MockHttpSession)result.getRequest().getSession())).andExpect(status().isOk()).andExpect(jsonPath("$.username").value("admin"));
   mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"admin\",\"password\":\"incorrect\"}")).andExpect(status().isUnauthorized());
  }
+ @Test void frameworkModeGeneratesOptionsAndOneClickChecksProvidersBeforeCreatingProject() throws Exception {
+  int before=s.db.queryForObject("SELECT COUNT(*) FROM projects WHERE client_id=?",Integer.class,client);
+  var input=new Models.ProjectInput("框架模式测试","","服饰鞋包","抖音","电商短视频",15,"鞋面颜色与拼接均已核实",true,List.of(),Map.of("campaignId","","creationMode","ECOMMERCE_VIDEO","productionMode","FRAMEWORK","productAssetIds",List.of("missing-image")),0);
+  String path="/api/clients/"+client+"/projects";
+  String created=mvc.perform(post(path).with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(input))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+  String id=s.json.readTree(created).get("id").asText();
+  mvc.perform(post(path+"/"+id+"/frameworks").with(user("admin")).with(csrf()))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3)).andExpect(jsonPath("$[0].title").isNotEmpty());
+  mvc.perform(post("/api/clients/"+client+"/projects/one-click").with(user("admin")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(s.write(new Models.OneClickStart(input,true))))
+    .andExpect(status().isServiceUnavailable());
+  assertThat(s.db.queryForObject("SELECT COUNT(*) FROM projects WHERE client_id=?",Integer.class,client)).isEqualTo(before+1);
+  assertThat(s.db.queryForObject("SELECT COUNT(*) FROM jobs WHERE client_id=?",Integer.class,client)).isZero();
+ }
  @Test void tenantIsolationBlocksReadsAndWrites() throws Exception {
   String id=project();
   for(String route:List.of("/projects","/projects/"+id,"/assets","/jobs","/metrics","/presets","/overview"))mvc.perform(get("/api/clients/"+client+route).with(user("intruder"))).andExpect(status().isNotFound());

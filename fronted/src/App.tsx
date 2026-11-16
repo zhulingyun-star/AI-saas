@@ -29,6 +29,7 @@ import Presets from './pages/Presets';
 import Analytics from './pages/Analytics';
 import Reference from './pages/Reference';
 import VideoRemake from './pages/VideoRemake';
+import ProjectEcommerceStart from './pages/ProjectEcommerceStart';
 const links = [
   ['/', '项目管理', LayoutDashboard],
   ['/content', '内容制作', Clapperboard],
@@ -219,6 +220,7 @@ export default function App() {
               <Route path="/" element={<Campaigns />} />
               <Route path="/projects/:id" element={<CampaignDetail />} />
               <Route path="/projects/:id/remake" element={<VideoRemake />} />
+              <Route path="/projects/:id/ecommerce" element={<ProjectEcommerceStart />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/content" element={<ContentHome />} />
               <Route path="/gallery" element={<Gallery />} />

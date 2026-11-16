@@ -29,6 +29,8 @@ public class WorkbenchController {
     @GetMapping("/clients/{c}/projects/{id}") Project project(Principal u,@PathVariable String c,@PathVariable String id) {s.access(c,u.getName());return s.project(c,id);}
     @PutMapping("/clients/{c}/projects/{id}") Project update(Principal u,@PathVariable String c,@PathVariable String id,@Valid @RequestBody ProjectInput p) {s.access(c,u.getName());return projects.update(c,id,u.getName(),p);}
     @PostMapping("/clients/{c}/projects/{id}/draft") Map<String,Object> draft(Principal u,@PathVariable String c,@PathVariable String id) {s.access(c,u.getName());return ai.draft(c,id);}
+    @PostMapping("/clients/{c}/projects/{id}/frameworks") List<AiService.FrameworkOption> frameworks(Principal u,@PathVariable String c,@PathVariable String id) {s.access(c,u.getName());return ai.frameworks(c,id);}
+    @PostMapping("/clients/{c}/projects/one-click") Map<String,Object> oneClick(Principal u,@PathVariable String c,@Valid @RequestBody OneClickStart body) {s.access(c,u.getName());if(!body.confirmed())throw Store.bad("请先确认一键成片可能产生模型和视频供应商费用");return projects.startOneClick(c,u.getName(),body.project());}
     @GetMapping("/clients/{c}/projects/{id}/export") ResponseEntity<String> export(Principal u,@PathVariable String c,@PathVariable String id) {
         s.access(c,u.getName());return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=script.json").contentType(MediaType.APPLICATION_JSON).body(s.write(s.project(c,id)));
     }

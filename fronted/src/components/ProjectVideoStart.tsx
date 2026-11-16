@@ -9,12 +9,13 @@ import { remakeShots, type RemakeSource } from '../remake';
 import { useCampaignProducts } from './CampaignProductsPanel';
 
 type Analysis = { status: string; stale: boolean; revision: number; report?: Record<string, unknown> };
-export default function ProjectVideoStart({ campaign, remake }: { campaign: Campaign; remake?: RemakeSource }) {
+export default function ProjectVideoStart({ campaign, remake, productionMode = 'FRAMEWORK' }: { campaign: Campaign; remake?: RemakeSource; productionMode?: 'FRAMEWORK' | 'ONE_CLICK' }) {
   const { client } = useWorkspace();
   const navigate = useNavigate();
   const cache = useQueryClient();
   const action = useAction();
   const assets = useData<Asset[]>('assets');
+  const system = useQuery<{aiMode:string;videoProviderConnected:boolean}>({queryKey:['system'],queryFn:()=>request('/system')});
   const bound = useCampaignProducts(campaign.id);
   const groups = productGroups(assets.data ?? []).filter(g => bound.data?.products.some(p => g.assets.some(a => a.id === p.anchorId)));
   const [selectedId, setSelectedId] = useState('');
@@ -23,6 +24,8 @@ export default function ProjectVideoStart({ campaign, remake }: { campaign: Camp
   const [platform, setPlatform] = useState('抖音');
   const [duration, setDuration] = useState(15);
   const group = groups.find(g => g.assets[0].id === selectedId);
+  const productImages = group ? [group.cover, ...group.assets.filter(a => a.id !== group.cover.id)].filter(a => a.mime.startsWith('image/')) : [];
+  const oneClickUnavailable = productionMode === 'ONE_CLICK' && (system.data?.aiMode !== 'openai' || !system.data?.videoProviderConnected);
   const analysis = useQuery({ queryKey: [client.id, 'product-analysis', selectedId],
     queryFn: () => request<Analysis>(`/clients/${client.id}/product-groups/${selectedId}/analysis`), enabled: !!selectedId,
   });
@@ -57,26 +60,41 @@ export default function ProjectVideoStart({ campaign, remake }: { campaign: Camp
         </div>
         <div>
           <Field label="发布平台"><select value={platform} onChange={e => setPlatform(e.target.value)}>{['抖音','小红书','TikTok','视频号'].map(p => <option key={p}>{p}</option>)}</select></Field>
-          <Field label="视频时长（秒）"><input type="number" min={5} max={60} value={duration} onChange={e => setDuration(Number(e.target.value))} /></Field>
-          <p className="caption">先创建草稿，不会提交视频生成。模型生成与供应商费用在制作步骤确认。</p>
-          <button className="primary" disabled={action.busy || !confirmed || !facts.trim() || !Number.isInteger(duration) || duration < 5 || duration > 60 || (!!remake && duration < remake.marks.length) || !group.assets.some(a => a.mime.startsWith('image/') || a.mime.startsWith('video/'))} onClick={() => action.run(async () => {
+          <Field label="视频时长（秒）"><input type="number" min={4} max={30} value={duration} onChange={e => setDuration(Number(e.target.value))} /></Field>
+          <p className="caption">{remake ? '先创建二创草稿，不会提交视频生成。' : productionMode === 'ONE_CLICK' ? oneClickUnavailable ? system.isPending ? '正在检查文字模型与视频生成服务…' : !system.data?.videoProviderConnected ? '视频生成服务未启用，当前不能使用一键成片。' : '文字模型未启用，当前不能使用一键成片。' : '确认后后台自动生成创作框架和分镜，并提交视频供应商。文字模型和视频生成可能产生费用。' : '先创建草稿并生成创作框架，确认后再生成分镜与视频。'}</p>
+          <button className="primary" disabled={action.busy || (productionMode === 'ONE_CLICK' && (system.isPending || oneClickUnavailable)) || !confirmed || !facts.trim() || !Number.isInteger(duration) || duration < 4 || duration > 30 || (!!remake && duration < remake.marks.length) || !productImages.length} onClick={() => action.run(async () => {
             const input = newProject(client.category);
             input.name = `${group.productName} · ${platform}视频`.slice(0,150); input.sku = group.sku; input.platform = platform; input.duration = duration;
             input.facts = facts; input.factsConfirmed = true;
             input.config = { ...input.config, campaignId: campaign.id, campaignBrief: campaign.brief.slice(0,2000), productAnchorId: selectedId,
-              productName: group.productName, productAssetIds: [group.cover, ...group.assets.filter(a => a.id !== group.cover.id)].filter(a => a.mime.startsWith('image/') || a.mime.startsWith('video/')).map(a => a.id), productCoverId: group.cover.id, productAnalysisRevision: analysis.data?.revision ?? null };
+              productName: group.productName, productAssetIds: productImages.map(a => a.id), productCoverId: group.cover.id, productAnalysisRevision: analysis.data?.revision ?? null };
             if (remake) {
               input.name = `${group.productName} · 视频二创`.slice(0,150);
               input.format = '参考片改编';
               input.shots = remakeShots(remake, duration, input.config.productAssetIds as string[]);
               input.config.creationMode = 'VIDEO_REMAKE';
               input.config.referenceLinks = [{ assetId: remake.assetId, name: remake.name, duration: remake.duration, mode: 'structure', source: remake.marks }];
+            } else {
+              input.name = `${group.productName} · 电商短视频`.slice(0,150);
+              input.format = '电商短视频';
+              input.config.creationMode = 'ECOMMERCE_VIDEO';
+              input.config.productionMode = productionMode;
+              input.config.productAnalysisSnapshot = analysis.data?.report ? { appearance: analysis.data.report.appearance ?? '', material: analysis.data.report.material ?? '' } : null;
+              input.config.productAnalysisRevision = analysis.data?.revision ?? null;
             }
             if (JSON.stringify(input.config).length > 10000) throw new Error('参考拆解与项目说明过长，请精简后再创建作品（制作配置上限 10000 字符）');
+            if (!remake && productionMode === 'ONE_CLICK') {
+              const accepted = window.confirm(`一键成片将自动生成创作框架和 ${duration} 秒分镜，然后提交视频生成。可能产生文字模型和视频供应商费用，失败前不会提交出片。确认继续？`);
+              if (!accepted) return;
+              const result = await post<{ project: Project; job: { id: string } }>(`/clients/${client.id}/projects/one-click`, { project: input, confirmed: true });
+              await Promise.all([cache.invalidateQueries({ queryKey: [client.id, 'works'] }), cache.invalidateQueries({ queryKey: [client.id, 'campaigns'] }), cache.invalidateQueries({ queryKey: [client.id, 'jobs'] })]);
+              navigate(`/queue?campaign=${campaign.id}&job=${result.job.id}`);
+              return;
+            }
             const saved = await post<Project>(`/clients/${client.id}/projects`, input);
             await Promise.all([cache.invalidateQueries({ queryKey: [client.id, 'works'] }), cache.invalidateQueries({ queryKey: [client.id, 'campaigns'] })]);
-            navigate('/studio/' + saved.id);
-          })}>{action.busy ? '正在创建…' : remake ? '创建二创作品，进入分镜确认' : '创建视频，进入方案制作'}</button>
+            navigate('/studio/' + saved.id + (!remake && productionMode === 'FRAMEWORK' ? '?framework=1' : ''));
+          })}>{action.busy ? '正在创建…' : remake ? '创建二创作品，进入分镜确认' : productionMode === 'ONE_CLICK' ? '确认并开始一键成片' : '创建作品，选择创作框架'}</button>
         </div>
       </div>}
     </>}

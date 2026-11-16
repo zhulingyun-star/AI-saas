@@ -13,11 +13,11 @@ import static com.shangzhen.workbench.Models.*;
 
 @Component
 public class JobWorker {
-    private final Store s; private final MediaService media; private final VideoApiClient video; private final String ffmpeg;
+    private final Store s; private final MediaService media; private final VideoApiClient video; private final ProjectService projects; private final String ffmpeg;
     private final ProductAnalysisService images;
     private final OssReferenceService oss;
     private volatile boolean ready;
-    public JobWorker(Store s,MediaService media,VideoApiClient video,ProductAnalysisService images,OssReferenceService oss,@Value("${app.ffmpeg}") String ffmpeg) {this.s=s;this.media=media;this.video=video;this.images=images;this.oss=oss;this.ffmpeg=ffmpeg;}
+    public JobWorker(Store s,MediaService media,VideoApiClient video,ProjectService projects,ProductAnalysisService images,OssReferenceService oss,@Value("${app.ffmpeg}") String ffmpeg) {this.s=s;this.media=media;this.video=video;this.projects=projects;this.images=images;this.oss=oss;this.ffmpeg=ffmpeg;}
     @EventListener(ApplicationReadyEvent.class) public void recover() {
         s.db.update("UPDATE jobs SET status='FAILED',message='服务重启中断了本地制作，请重新提交',updated_at=? WHERE status='RUNNING' AND provider<>'VIDEO_API'",Store.now());
         s.db.update("UPDATE jobs SET status='BLOCKED',message='服务重启时供应商任务编号尚未保存，状态未知；请先核对供应商控制台，不会自动重发',updated_at=? WHERE status='RUNNING' AND provider='VIDEO_API' AND external_task_id IS NULL",Store.now());
@@ -30,6 +30,9 @@ public class JobWorker {
         if(task.status().equals("QUEUED")&&s.db.update("UPDATE jobs SET status='RUNNING',progress=5,message=?,updated_at=? WHERE id=? AND status='QUEUED'",task.provider().equals("VIDEO_API")?"正在向视频供应商提交任务": "正在处理真实素材",Store.now(),id)==0)return;
         try {
             Project p=s.snapshot(s.db.queryForObject("SELECT snapshot FROM jobs WHERE id=?",String.class,id));
+            if(task.provider().equals("VIDEO_API")&&task.externalTaskId().isBlank()&&p.shots().isEmpty()&&"ONE_CLICK".equals(p.config().get("productionMode"))){
+                try{p=projects.prepareOneClick(id,p);}catch(Exception e){s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?","自动生成框架或分镜失败；视频供应商尚未收到请求。项目与商品资料已保留，可检查后重新创建一键任务",Store.now(),id);return;}
+            }
             if(task.provider().equals("VIDEO_API")) { processVideo(task,p); return; }
             render(id,p);
             s.db.update("UPDATE jobs SET status='REVIEW',progress=100,message='本地粗剪已完成，画面来自上传素材，并非 AI 生成',output_name=?,updated_at=? WHERE id=?",id+".mp4",Store.now(),id);
@@ -78,6 +81,7 @@ public class JobWorker {
         if(p.config().get("generationPrompt") instanceof String prompt&&!prompt.isBlank())return prompt;
         StringBuilder prompt=new StringBuilder("制作一条电商商品短视频。平台：").append(p.platform()).append("；类目：").append(p.category())
                 .append("；商品：").append(p.name()).append("；已确认事实：").append(p.facts()).append("。不得添加未确认的功效、价格或规格。分镜：");
+        if(p.config().get("creativeFramework") instanceof Map<?,?> framework)prompt.append("创作框架：").append(Objects.toString(framework.get("title"),"")).append("；").append(Objects.toString(framework.get("summary"),"")).append("。\n");
         for(int i=0;i<p.shots().size();i++) prompt.append(i+1).append(". ").append(p.shots().get(i).visual()).append("；");
         if(prompt.length()>5000)throw Store.bad("视频提示词超过5000字，请精简");return prompt.toString();
     }
