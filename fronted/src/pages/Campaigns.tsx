@@ -15,8 +15,8 @@ import {
   useAction,
 } from '../components/UI';
 import { ProductionNav } from '../components/ProductionNav';
-import { post, put } from '../api';
-import { phases, type Campaign, type Work, type Contact } from '../types';
+import { post, put, request } from '../api';
+import { phases, type Campaign, type Project, type Work, type Contact } from '../types';
 
 export default function Campaigns() {
   const data = useData<Campaign[]>('campaigns', true);
@@ -237,12 +237,14 @@ export function Tasks() {
 }
 export function WorkList({ campaignId, tasks = false }: { campaignId?: string; tasks?: boolean }) {
   const data = useData<Work[]>('works', true);
-  const { username } = useWorkspace();
+  const { client, username, notify } = useWorkspace();
+  const navigate = useNavigate();
   const [scope, setScope] = useState(tasks ? 'mine' : 'all');
   const [phase, setPhase] = useState('ALL');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<Work[] | null>(null);
+  const [openingWork, setOpeningWork] = useState('');
   const [page, setPage] = useState(0);
   const list =
     data.data?.filter(
@@ -255,6 +257,18 @@ export function WorkList({ campaignId, tasks = false }: { campaignId?: string; t
         `${w.name} ${w.sku}`.includes(query),
     ) ?? [];
   const visible = list.slice(page * 20, page * 20 + 20);
+  async function openWork(work: Work) {
+    if (openingWork) return;
+    setOpeningWork(work.id);
+    try {
+      const project = await request<Project>(`/clients/${client.id}/projects/${work.id}`);
+      navigate(workDestination(work, [project]));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '读取作品失败');
+    } finally {
+      setOpeningWork('');
+    }
+  }
   const safePage = Math.min(page, Math.max(0, Math.ceil(list.length / 20) - 1));
   if (page !== safePage) setPage(safePage);
   return (
@@ -376,8 +390,8 @@ export function WorkList({ campaignId, tasks = false }: { campaignId?: string; t
                   <td>{w.assignee}</td>
                   <td>{w.dueDate ?? '未设置'}</td>
                   <td>
-                    <Link className="button" to={'/studio/' + w.id}>
-                      打开作品
+                    <Link className="button" to={'/studio/' + w.id} onClick={(event) => { event.preventDefault(); void openWork(w); }} aria-disabled={!!openingWork}>
+                      {openingWork === w.id ? '正在打开…' : '打开作品'}
                     </Link>{' '}
                     <button onClick={() => setEditing([w])}>分工</button>
                   </td>
@@ -407,6 +421,23 @@ export function WorkList({ campaignId, tasks = false }: { campaignId?: string; t
       )}
     </>
   );
+}
+
+export function workDestination(work: Work, projects: Project[]): string {
+  const project = projects.find((item) => item.id === work.id);
+  if (project?.config.creationMode === 'VIDEO_REMAKE') {
+    const campaign = typeof project.config.campaignId === 'string' ? project.config.campaignId : work.campaignId;
+    const links = project.config.referenceLinks;
+    const first = Array.isArray(links) ? links[0] : undefined;
+    const reference = first && typeof first === 'object' && 'assetId' in first && typeof first.assetId === 'string'
+      ? first.assetId
+      : '';
+    if (campaign) {
+      const query = reference ? `?reference=${encodeURIComponent(reference)}` : '';
+      return `/projects/${encodeURIComponent(campaign)}/remake${query}`;
+    }
+  }
+  return `/studio/${encodeURIComponent(work.id)}`;
 }
 function FlowForm({ works, onClose }: { works: Work[]; onClose: () => void }) {
   const { client, username } = useWorkspace();

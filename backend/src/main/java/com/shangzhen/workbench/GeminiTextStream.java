@@ -20,7 +20,7 @@ final class GeminiTextStream {
         long started = System.nanoTime();
         var response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
         try (InputStream body = response.body()) {
-            if (response.statusCode() != 200) throw new IllegalStateException("生成服务返回HTTP " + response.statusCode());
+            if (response.statusCode() != 200) throw providerError(response.statusCode(), body, json);
             if (!response.headers().firstValue("Content-Type").orElse("").contains("text/event-stream"))
                 throw new IllegalStateException("生成服务未返回流式内容");
             AtomicBoolean expired = new AtomicBoolean();
@@ -51,6 +51,21 @@ final class GeminiTextStream {
                 throw e;
             } finally { deadline.cancel(false); }
         }
+    }
+
+    private static IllegalStateException providerError(int status, InputStream body, ObjectMapper json) throws IOException {
+        String response = new String(body.readNBytes(8192), StandardCharsets.UTF_8);
+        String code = "", message = "";
+        try {
+            var error = json.readTree(response).path("error");
+            code = error.path("code").asText("");
+            message = error.path("message").asText("");
+        } catch (Exception ignored) { }
+        if (status == 503 && (code.equals("system_disk_overloaded") || message.toLowerCase().contains("disk overloaded")))
+            return new IllegalStateException("模型服务商系统过载（HTTP 503）；已保存内容保留，请稍后再试");
+        if (status == 503) return new IllegalStateException("模型服务商暂时不可用（HTTP 503）；已保存内容保留，请稍后再试");
+        if (status == 429) return new IllegalStateException("模型服务商限流（HTTP 429）；已保存内容保留，请稍后再试");
+        return new IllegalStateException("生成服务返回HTTP " + status);
     }
 
     private static boolean accept(String data, ObjectMapper json, StringBuilder answer, Consumer<String> progress) throws IOException {

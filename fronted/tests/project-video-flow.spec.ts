@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import pathModule from 'node:path';
 import { remakeShots, validateRemake } from '../src/remake';
+import { workDestination } from '../src/pages/Campaigns';
 
 test('remake rejects duplicate cuts and preserves total target duration', () => {
   const source = { assetId: 'ref', name: 'ref', duration: 10, marks: [
@@ -10,6 +11,13 @@ test('remake rejects duplicate cuts and preserves total target duration', () => 
   expect(remakeShots(source, 15, ['product']).map(s => s.duration)).toEqual([6, 9]);
   expect(remakeShots(source, 5, ['product']).reduce((sum, s) => sum + s.duration, 0)).toBe(5);
   expect(validateRemake({ ...source, marks: [source.marks[0], { ...source.marks[1], time: 0 }] })).toContain('重复');
+});
+
+test('video remake works reopen the reference workflow while regular works stay in Studio', () => {
+  const work: any = { id: 'work-1', campaignId: 'campaign-1' };
+  expect(workDestination(work, [{ id: 'work-1', config: { creationMode: 'VIDEO_REMAKE', campaignId: 'campaign-1', referenceLinks: [{ assetId: 'ref-1' }] } } as any]))
+    .toBe('/projects/campaign-1/remake?reference=ref-1');
+  expect(workDestination(work, [{ id: 'work-1', config: {} } as any])).toBe('/studio/work-1');
 });
 
 test('create campaign → select product → verify facts → remake shots → scoped queue', async ({ page }, testInfo) => {
@@ -40,6 +48,7 @@ test('create campaign → select product → verify facts → remake shots → s
     if(path.endsWith('/assets/ref/file'))return route.fulfill({contentType:'video/mp4',path:pathModule.resolve('tests/fixtures/remake-test.mp4')});
     if(path.endsWith('/file'))return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="gray"/></svg>'});
     if(path.endsWith('/works'))return json(work?[{...work,campaignId:'campaign-1',phase:'PLAN',assignee:'admin',dueDate:null}]:[]);
+    if(path.endsWith('/projects')&&method==='GET')return json(work?[work]:[]);
     if(path.endsWith('/draft'))return json({shots:[{duration:7,visual:'商品侧面',narration:'灰白配色',assetId:null,startAt:0,locked:false},{duration:8,visual:'展示鞋面',narration:'查看详情',assetId:null,startAt:0,locked:false}],notice:'测试分镜'});
     if(path.endsWith('/projects')&&method==='POST'){work={...route.request().postDataJSON(),id:'work-1',clientId:'c',status:'DRAFT',revision:0};return json(work);}
     if(path.endsWith('/projects/work-1')){if(method==='PUT')work={...work,...route.request().postDataJSON(),revision:work.revision+1};return json(work);}
@@ -55,6 +64,7 @@ test('create campaign → select product → verify facts → remake shots → s
   await expect(page).toHaveURL(/\/projects\/campaign-1$/);
   await expect(page.getByRole('button',{name:'在此项目做视频',exact:true})).toBeDisabled();
   await page.goto('/projects/campaign-1/remake');
+  await expect(page.getByRole('link',{name:'④ 生成与审片'})).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'请先绑定商品',exact:true})).toBeVisible();
   await page.getByRole('link',{name:'返回项目选择商品'}).click();
   await page.getByRole('button',{name:'选择商品',exact:true}).click();
@@ -66,7 +76,7 @@ test('create campaign → select product → verify facts → remake shots → s
   await expect(page.getByRole('heading',{name:'剧情模式',exact:true})).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mode-choice.png') });
   await page.getByRole('link').filter({has:page.getByRole('heading',{name:'视频二创模式',exact:true})}).click();
-  await expect(page).toHaveURL(/\/projects\/campaign-1\/remake$/);
+  await expect(page).toHaveURL(/\/projects\/campaign-1\/remake(?:\?.*)?$/);
   await page.getByRole('button',{name:'参考片.mp4',exact:true}).click();
   await page.reload();
   await expect(page.getByLabel('原片画面与结构')).toHaveValue('开场全貌');
@@ -98,4 +108,8 @@ test('create campaign → select product → verify facts → remake shots → s
   await expect(page).toHaveURL(/\/queue\?campaign=campaign-1$/);
   await expect(page.getByRole('link',{name:'返回当前项目',exact:true})).toBeVisible();
   expect(jobs).toHaveLength(1);
+  await page.goto('/projects/campaign-1');
+  await page.getByRole('link',{name:'打开作品',exact:true}).click();
+  await expect(page).toHaveURL(/\/projects\/campaign-1\/remake\?reference=ref$/);
+  await expect(page.getByRole('heading',{name:'视频二创模式',exact:true})).toBeVisible();
 });

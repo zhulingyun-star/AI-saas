@@ -48,5 +48,13 @@ class GeminiTextStreamTest {
             assertThatThrownBy(()->GeminiTextStream.generate(HttpClient.newHttpClient(),request(server),new ObjectMapper(),Duration.ofMillis(200),text->{})).isInstanceOf(HttpTimeoutException.class);
         } finally {close.countDown();server.stop(0);}
     }
+    @Test void reportsProviderOverloadWithoutCallingItAMisconfiguredModel() throws Exception {
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
+        server.createContext("/",exchange->{byte[] body="{\"error\":{\"message\":\"system disk overloaded (current: 99.7%, threshold: 95%)\",\"code\":\"system_disk_overloaded\"}}".getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(503,body.length);exchange.getResponseBody().write(body);exchange.close();});server.start();
+        try {
+            assertThatThrownBy(()->GeminiTextStream.generate(HttpClient.newHttpClient(),request(server),new ObjectMapper(),Duration.ofSeconds(5),text->{}))
+                .hasMessageContaining("服务商系统过载");
+        } finally {server.stop(0);}
+    }
     private HttpRequest request(HttpServer server){return HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/")).timeout(Duration.ofSeconds(5)).GET().build();}
 }

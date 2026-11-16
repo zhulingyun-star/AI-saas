@@ -134,7 +134,6 @@ export default function VideoRemake() {
       <button aria-current={!copyOpen ? 'step' : undefined} disabled={copyNavigation.dirty} onClick={() => goToStage('reference')}>① 参考视频与结构拆解</button>
       <button aria-current={copyOpen && copyStage === 'copy' ? 'step' : undefined} disabled={!selected || (!copyOpen && !referenceReady) || !readState.data?.report} onClick={() => goToStage('copy')}>② 台词与花字替换</button>
       <button aria-current={copyOpen && copyStage === 'prompt' ? 'step' : undefined} disabled={!selected || copyNavigation.dirty || !readState.data?.report || (!copyOpen && !referenceReady)} onClick={() => goToStage('prompt')}>③ 视频制作</button>
-      <Link className="button" to={`/queue?campaign=${campaign.id}`} onClick={event => { if (copyNavigation.dirty) event.preventDefault(); }} aria-disabled={copyNavigation.dirty}>④ 生成与审片</Link>
     </nav>
     <p className="hint">原速读片，字幕优先。候选切点需核对；机位、衔接和特效分别编辑，补读建议由你确认采用。</p>
     {action.error && <ErrorState error={new Error(action.error)} />}
