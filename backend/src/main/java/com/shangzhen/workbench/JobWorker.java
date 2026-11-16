@@ -31,6 +31,7 @@ public class JobWorker {
         try {
             Project p=s.snapshot(s.db.queryForObject("SELECT snapshot FROM jobs WHERE id=?",String.class,id));
             if(task.provider().equals("VIDEO_API")&&task.externalTaskId().isBlank()&&p.shots().isEmpty()&&"ONE_CLICK".equals(p.config().get("productionMode"))){
+                s.db.update("UPDATE jobs SET progress=15,message='正在生成创作框架与分镜，完成后自动提交视频',updated_at=? WHERE id=?",Store.now(),id);
                 try{p=projects.prepareOneClick(id,p);}catch(Exception e){s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?","自动生成框架或分镜失败；视频供应商尚未收到请求。项目与商品资料已保留，可检查后重新创建一键任务",Store.now(),id);return;}
             }
             if(task.provider().equals("VIDEO_API")) { processVideo(task,p); return; }
@@ -82,7 +83,14 @@ public class JobWorker {
         StringBuilder prompt=new StringBuilder("制作一条电商商品短视频。平台：").append(p.platform()).append("；类目：").append(p.category())
                 .append("；商品：").append(p.name()).append("；已确认事实：").append(p.facts()).append("。不得添加未确认的功效、价格或规格。分镜：");
         if(p.config().get("creativeFramework") instanceof Map<?,?> framework)prompt.append("创作框架：").append(Objects.toString(framework.get("title"),"")).append("；").append(Objects.toString(framework.get("summary"),"")).append("。\n");
-        for(int i=0;i<p.shots().size();i++) prompt.append(i+1).append(". ").append(p.shots().get(i).visual()).append("；");
+        prompt.append("竖屏9:16，成片总长").append(p.duration()).append("秒，商品外形和配色与参考图片保持一致。不要把产品印字当字幕或后期花字。\n");
+        int elapsed=0;
+        for(int i=0;i<p.shots().size();i++) {
+            Shot shot=p.shots().get(i);
+            prompt.append("第").append(i+1).append("镜 ").append(elapsed).append("–").append(elapsed+shot.duration()).append("秒：").append(shot.visual());
+            if(shot.narration()!=null&&!shot.narration().isBlank())prompt.append("；画外音：「").append(shot.narration()).append("」");
+            prompt.append('\n');elapsed+=shot.duration();
+        }
         if(prompt.length()>5000)throw Store.bad("视频提示词超过5000字，请精简");return prompt.toString();
     }
     static List<String> referenceIds(Project p){

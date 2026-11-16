@@ -12,7 +12,8 @@ public class ProjectService {
     private final Store s;
     private final VideoApiClient video;
     private final AiService ai;
-    public ProjectService(Store s, VideoApiClient video, AiService ai) {this.s=s;this.video=video;this.ai=ai;}
+    private final OssReferenceService oss;
+    public ProjectService(Store s, VideoApiClient video, AiService ai, OssReferenceService oss) {this.s=s;this.video=video;this.ai=ai;this.oss=oss;}
     void validate(String client,ProjectInput p) {
         if(p.shots().size()>0 && p.shots().stream().mapToInt(Shot::duration).sum()!=p.duration()) throw Store.bad("镜头总时长必须等于成片时长");
         if(s.write(p.config()).length()>10000) throw Store.bad("制作配置过长");
@@ -34,11 +35,15 @@ public class ProjectService {
     }
     @Transactional public Map<String,Object> startOneClick(String client,String user,ProjectInput input){
         if(!input.factsConfirmed()||input.facts().isBlank())throw Store.bad("请先确认商品事实");
+        if(input.duration()<4||input.duration()>30)throw Store.bad("一键成片时长须为4至30秒");
         if(!ai.enabled())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"文字模型未配置；尚未创建任务");
         if(!video.enabled())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"视频供应商未启用；尚未创建任务");
+        if(!oss.enabled())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"商品图片存储未配置；尚未创建任务");
         if(!"ECOMMERCE_VIDEO".equals(input.config().get("creationMode"))||!"ONE_CLICK".equals(input.config().get("productionMode")))throw Store.bad("一键成片模式标记无效");
         if(!input.shots().isEmpty())throw Store.bad("一键成片必须从空分镜草稿开始");
         List<String> imageIds=productImages(input.config());if(imageIds.isEmpty()||imageIds.size()>30)throw Store.bad("一键成片需要1至30张商品图片");
+        String campaign=Objects.toString(input.config().get("campaignId"),""),anchor=Objects.toString(input.config().get("productAnchorId"),"");
+        if(s.db.queryForObject("SELECT COUNT(*) FROM campaign_products WHERE campaign_id=? AND anchor_id=?",Integer.class,campaign,anchor)==0)throw Store.bad("请先在项目绑定所选商品");
         for(String id:imageIds)if(!s.asset(client,id).mime().startsWith("image/"))throw Store.bad("一键成片参考素材必须是图片");
         Project project=create(client,user,input);
         s.db.queryForObject("SELECT id FROM clients WHERE id=? FOR UPDATE",String.class,client);
@@ -50,7 +55,6 @@ public class ProjectService {
     private List<String> productImages(Map<String,Object> config){Object raw=config.get("productAssetIds");if(!(raw instanceof List<?> ids))return List.of();return ids.stream().map(Object::toString).distinct().toList();}
     @Transactional public Project prepareOneClick(String jobId,Project snapshot){
         Project current=s.project(snapshot.clientId(),snapshot.id());if(current.revision()!=snapshot.revision())throw new ResponseStatusException(HttpStatus.CONFLICT,"作品已修改；一键任务未覆盖用户修改");
-        s.db.update("UPDATE jobs SET progress=15,message='正在生成创作框架与分镜',updated_at=? WHERE id=? AND status='RUNNING'",Store.now(),jobId);
         AiService.OneClickDraft generated=ai.oneClickDraft(current);
         List<String> images=productImages(current.config());List<Shot> shots=new ArrayList<>();
         for(int i=0;i<generated.shots().size();i++){AiService.DraftShot shot=generated.shots().get(i);shots.add(new Shot(shot.duration(),shot.visual(),shot.narration(),images.get(i%images.size()),0,false));}

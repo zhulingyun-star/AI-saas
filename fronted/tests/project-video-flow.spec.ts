@@ -84,10 +84,13 @@ test('framework mode saves the selected framework then opens editable shots', as
     return json([]);
   });
   await page.goto('/projects/campaign-1/ecommerce?mode=framework');
-  await page.getByRole('button',{name:/灰白运动鞋/}).click();
+  await expect(page.getByRole('button',{name:/灰白运动鞋.*已选择/})).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByLabel('本条视频的商品事实')).toBeVisible();
+  await expect(page.getByRole('toolbar',{name:'商品核对与下一步'}).getByRole('button',{name:'下一步：选择创作框架'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'下一步：选择创作框架'})).toBeDisabled();
   await page.getByLabel('本条视频的商品事实').fill('灰白拼色，网眼鞋面，信息以实物为准');
   await page.getByLabel('已核对以上事实和素材使用权').check();
-  await page.getByRole('button',{name:'创建作品，选择创作框架'}).click();
+  await page.getByRole('button',{name:'下一步：选择创作框架'}).click();
   await expect(page).toHaveURL(/\/studio\/ecom-1\?framework=1$/);
   await page.getByRole('button',{name:'生成创作框架'}).click();
   await expect(page.getByRole('heading',{name:'细节证据',exact:true})).toBeVisible();
