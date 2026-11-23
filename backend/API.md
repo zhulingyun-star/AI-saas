@@ -89,3 +89,29 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 工作流阶段 PLAN、MATERIALS、PRODUCTION、EDIT、REVIEW、CHANGES 可人工保存。WAITING_SYSTEM 从真实活跃任务派生；DELIVERED 由真实结果审核产生，手动设置拒绝。项目交付数按曾通过交付审核的不同作品计数，同作品多次出片不重复计数。新的失败或草稿不删除旧的固定交付文件。
 
 `config.campaignId` 与 `work_flow.campaign_id` 同步；修改分工也递增作品 revision。不同客户项目/作品引用会被拒绝。预设新增 FAVORITE 类型保存拍法收藏；原 RULE / RECIPE / LOOK 保留。
+
+## 商品库（V8）
+
+以下仍以 `/api/clients/{clientId}` 为前缀，均校验客户所有者，写操作需要 CSRF。商品仍由同一 `productGroupId` 的素材组成，`{anchor}` 为该商品任意一个素材 ID；写操作会在缺少 `productGroupId` 的旧商品上自动补上。
+
+| 接口 | 请求与语义 |
+| --- | --- |
+| GET `/product-library` | `{folders:[{id,parentId,name,sortOrder,revision}], products:{商品键:{groupId,anchorId,folderId,analysis,reviewed,confirmed,understandingSaved,personaCount,projectCount}}}`。商品键与前端分组一致（`group:ID` / `sku:` / `name:` / `asset:`）；`analysis` 为分析状态摘要（status、revision、analyzedAt、stale、category、confirmCount、unverifiedCount、provableCount、riskCount），没有分析时省略 |
+| POST `/product-folders` | `{name,parentId?}` 新建文件夹。最多两层；同一客户内名称唯一；`全部商品`、`未分类`、`待核对` 为固定分类，不能用作名称 |
+| PUT `/product-folders/{id}` | `{name,revision}` 改名，revision 不一致返回 409 |
+| DELETE `/product-folders/{id}` | 只能删除没有子文件夹、没有商品的文件夹，204 |
+| PUT `/product-groups/{anchor}/folder` | `{folderId}` 移动商品；`folderId` 为空表示放回未分类。一个商品只在一个文件夹 |
+| PUT `/product-groups/{anchor}/review` | `{confirmed:[条目键...],reviewed}` 保存分析核对进度；`reviewed=true` 记录本次分析时间，重新分析后自动回到待核对 |
+| GET `/product-groups/{anchor}/understanding` | 商品理解与目标人群。未保存时 `understanding` 为根据商品分析确定性推导的内容（`source=DERIVED`，`saved=false`），`personas` 为推导出的建议人群（无 id，`personasSaved=false`） |
+| PUT `/product-groups/{anchor}/understanding` | `{understanding:{core,sub,pain,obj,scene,when},revision}`；首次保存 revision=0，之后用返回的 revision，冲突 409。每类最多 12 个标签、每个最多 60 字 |
+| POST `/product-groups/{anchor}/understanding/extract` | `{revision}` 重新提取。配置了文字模型时调用 AiService（结果中出现分析里没有的价格、优惠、功效、产地等字眼会被丢弃，`source=AI`）；`AI_MODE=local` 时按分析结果确定性推导（`source=DERIVED`）。没有分析结果返回 400 |
+| POST `/product-groups/{anchor}/personas/adopt` | 把建议人群写入库；已保存过人群的商品不会重复写入 |
+| POST `/product-groups/{anchor}/personas` | `{name,pain,want,tone,scene,worry,hooks}` 新增人群（未保存过时先采用建议人群）。每个商品最多 12 个 |
+| PUT `/product-groups/{anchor}/personas/{id}` | `{persona:{...},revision}` 修改，冲突 409 |
+| DELETE `/product-groups/{anchor}/personas/{id}` | 删除人群，返回最新的商品理解与人群 |
+
+商品理解分类：`core` 核心卖点、`sub` 次要卖点、`pain` 用户痛点、`obj` 购买顾虑、`scene` 使用场景、`when` 购买时机。本地推导只使用商品分析中已有的文字：核心卖点来自非待验证的可证明卖点，次要卖点来自可展示细节，购买顾虑来自待确认资料和待验证卖点，使用场景来自适用场景和搭配；分析里没有购买时机，本地推导留空。
+
+人群 `hooks` 只能取 8 种开头类型：痛点型、反常识型、对比型、结果前置型、价格型、人群锁定型、悬念型、身份代入型。
+
+新表：`product_folders`（文件夹）、`product_profiles`（商品所在文件夹、核对进度、人群是否已保存）、`product_understandings`（商品理解）、`product_personas`（目标人群）。

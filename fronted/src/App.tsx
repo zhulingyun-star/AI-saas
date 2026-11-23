@@ -1,20 +1,7 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  LayoutDashboard,
-  Clapperboard,
-  FolderOpen,
-  SlidersHorizontal,
-  ChartNoAxesCombined,
-  Users,
-  LogOut,
-  Plus,
-  PanelLeftClose,
-  PanelLeftOpen,
-  ArrowUpRight,
-  Film,
-} from 'lucide-react';
+import { ArrowUpRight, Film } from 'lucide-react';
 import { request, post, resetCsrf } from './api';
 import { Workspace, Loading, ErrorState, Modal, Field } from './components/UI';
 import type { Client } from './types';
@@ -30,27 +17,14 @@ import Analytics from './pages/Analytics';
 import Reference from './pages/Reference';
 import VideoRemake from './pages/VideoRemake';
 import ProjectEcommerceStart from './pages/ProjectEcommerceStart';
-const links = [
-  ['/', '项目管理', LayoutDashboard],
-  ['/content', '内容制作', Clapperboard],
-  ['/assets', '资源中心', FolderOpen],
-  ['/presets', '客户知识', SlidersHorizontal],
-  ['/analytics', '投放复盘', ChartNoAxesCombined],
-  ['/team', '团队与费用', Users],
-] as const;
+import Shell, { Legacy } from './gy/Shell';
+import ProductList from './pages/products/ProductList';
+import ProductNew from './pages/products/ProductNew';
+import ProductDetail from './pages/products/ProductDetail';
+import ProductReview from './pages/products/ProductReview';
 export default function App() {
   const cache = useQueryClient();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const selectedSection =
-    ['/projects', '/tasks', '/queue', '/review'].some((p) => pathname.startsWith(p)) ||
-    pathname === '/'
-      ? '/'
-      : ['/studio', '/gallery', '/batch'].some((p) => pathname.startsWith(p))
-        ? '/content'
-        : ['/models', '/wardrobe', '/voices', '/reference'].some((p) => pathname.startsWith(p))
-          ? '/assets'
-          : pathname;
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => request<{ username: string }>('/auth/me'),
@@ -62,7 +36,6 @@ export default function App() {
   });
   const [active, setActive] = useState(() => localStorage.getItem('shangzhen-client') ?? '');
   const [toast, setToast] = useState('');
-  const [collapsed, setCollapsed] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   useEffect(() => {
@@ -135,118 +108,60 @@ export default function App() {
     );
   return (
     <Workspace.Provider value={{ client, username: me.data.username, notify: setToast }}>
-      <div className={`app-shell ${collapsed ? 'collapsed' : ''}`}>
-        <aside className="sidebar">
-          <NavLink to="/" className="brand">
-            <div className="brand-icon">
-              <Film size={22} />
-            </div>
-            <span>
-              心流<small>电商内容生产</small>
-            </span>
-          </NavLink>
-          <div className="workspace-label">客户工作空间</div>
-          <div className="client-select">
-            <select
-              aria-label="切换客户"
-              value={client.id}
-              onChange={(e) => {
-                setActive(e.target.value);
-                localStorage.setItem('shangzhen-client', e.target.value);
-                navigate('/');
-              }}
-            >
-              {clients.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <button onClick={() => setCreating(true)} aria-label="新建客户">
-              <Plus size={16} />
-            </button>
-          </div>
-          <nav>
-            {links.map(([path, label, Icon]) => (
-              <NavLink
-                end={path === '/'}
-                key={path}
-                to={path}
-                className={() => (selectedSection === path ? 'active' : '')}
-              >
-                <Icon size={18} />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </nav>
-          <div className="sidebar-footer">
-            <span className="connection-dot" />
-            <span>服务端存储 · 客户工作空间</span>
-            <small>WORKBENCH / 0.1</small>
-          </div>
-        </aside>
-        <div className="main-shell">
-          <header className="topbar">
-            <div className="row">
-              <button
-                aria-label="切换侧栏"
-                className="icon-button"
-                onClick={() => setCollapsed(!collapsed)}
-              >
-                {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-              </button>
-              <span className="top-client">{client.name}</span>
-              <span className="pill">{client.category}</span>
-            </div>
-            <div className="row">
-              <span className="muted">{me.data.username}</span>
-              <button
-                className="icon-button"
-                title="退出登录"
-                onClick={async () => {
-                  await request('/auth/logout', { method: 'POST' });
-                  resetCsrf();
-                  cache.clear();
-                  navigate('/');
-                  me.refetch();
-                }}
-              >
-                <LogOut size={17} />
-              </button>
-            </div>
-          </header>
-          <main key={client.id}>
-            <Routes>
-              <Route path="/" element={<Campaigns />} />
-              <Route path="/projects/:id" element={<CampaignDetail />} />
-              <Route path="/projects/:id/remake" element={<VideoRemake />} />
-              <Route path="/projects/:id/ecommerce" element={<ProjectEcommerceStart />} />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/content" element={<ContentHome />} />
-              <Route path="/gallery" element={<Gallery />} />
-              <Route path="/team" element={<Team />} />
-              <Route path="/studio" element={<Studio />} />
-              <Route path="/studio/:id" element={<Studio />} />
-              <Route path="/batch" element={<Batch />} />
-              <Route path="/queue" element={<Queue />} />
-              <Route path="/review" element={<Queue reviewOnly />} />
-              <Route path="/assets" element={<Assets key="assets" />} />
-              <Route path="/models" element={<Assets key="models" kind="MODEL" />} />
-              <Route path="/wardrobe" element={<Assets key="wardrobe" kind="GARMENT" />} />
-              <Route path="/voices" element={<Assets key="voices" kind="VOICE" />} />
-              <Route path="/reference" element={<Reference />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/presets" element={<Presets />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </main>
-          <footer className="page-footer">
-            心流 · 电商内容生产 <span>事实 → 脚本 → 制作 → 审核 → 交付</span>
-          </footer>
-        </div>
-      </div>
+      <Shell
+        client={client}
+        clients={clients.data ?? []}
+        username={me.data.username}
+        onSwitch={(id) => {
+          setActive(id);
+          localStorage.setItem('shangzhen-client', id);
+          navigate('/');
+        }}
+        onCreateClient={() => setCreating(true)}
+        onLogout={async () => {
+          await request('/auth/logout', { method: 'POST' });
+          resetCsrf();
+          cache.clear();
+          navigate('/');
+          me.refetch();
+        }}
+      >
+        <Routes>
+          <Route path="/" element={<Legacy page={<Campaigns />} />} />
+          <Route path="/projects/:id" element={<Legacy page={<CampaignDetail />} />} />
+          <Route path="/projects/:id/remake" element={<Legacy page={<VideoRemake />} />} />
+          <Route
+            path="/projects/:id/ecommerce"
+            element={<Legacy page={<ProjectEcommerceStart />} />}
+          />
+          <Route path="/tasks" element={<Legacy page={<Tasks />} />} />
+          <Route path="/content" element={<Legacy page={<ContentHome />} />} />
+          <Route path="/gallery" element={<Legacy page={<Gallery />} />} />
+          <Route path="/team" element={<Legacy page={<Team />} />} />
+          <Route path="/studio" element={<Legacy page={<Studio />} />} />
+          <Route path="/studio/:id" element={<Legacy page={<Studio />} />} />
+          <Route path="/batch" element={<Legacy page={<Batch />} />} />
+          <Route path="/queue" element={<Legacy page={<Queue />} />} />
+          <Route path="/review" element={<Legacy page={<Queue reviewOnly />} />} />
+          <Route path="/products" element={<ProductList />} />
+          <Route path="/products/new" element={<ProductNew />} />
+          <Route path="/products/:id" element={<ProductDetail />} />
+          <Route path="/products/:id/review" element={<ProductReview />} />
+          <Route path="/assets" element={<Legacy page={<Assets key="assets" />} />} />
+          <Route path="/models" element={<Legacy page={<Assets key="models" kind="MODEL" />} />} />
+          <Route
+            path="/wardrobe"
+            element={<Legacy page={<Assets key="wardrobe" kind="GARMENT" />} />}
+          />
+          <Route path="/voices" element={<Legacy page={<Assets key="voices" kind="VOICE" />} />} />
+          <Route path="/reference" element={<Legacy page={<Reference />} />} />
+          <Route path="/analytics" element={<Legacy page={<Analytics />} />} />
+          <Route path="/presets" element={<Legacy page={<Presets />} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Shell>
       {toast && (
-        <div className="toast" role="status">
+        <div className="gy-toast gy-new" role="status">
           {toast}
         </div>
       )}
