@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, Play, Plus } from 'lucide-react';
 import { request } from '../../api';
 import { useWorkspace } from '../../components/UI';
-import { Btn, Card, Notice, SearchBox } from '../../gy/ui';
+import { Btn, Notice, SearchBox } from '../../gy/ui';
 import { FolderGroup, folderPath } from '../../gy/folders';
 import {
   boardSummary,
@@ -226,38 +226,6 @@ export default function ReferencePicker({
           )}
         </div>
       </section>
-    </div>
-  );
-}
-
-/**
- * 只在开发环境挂出来的演示页（/dev/reference-picker）：给 Playwright 覆盖选择弹窗用，
- * 第 3 块新建项目接入后可以删掉。
- */
-export function ReferencePickerDemo() {
-  const [open, setOpen] = useState(false);
-  const [picked, setPicked] = useState<RefItem | null>(null);
-  return (
-    <div className="gy-page gy-new">
-      <Card pad>
-        <b>参考视频选择弹窗（开发用演示）</b>
-        <span className="gy-muted" role="status">
-          当前参考视频：{picked ? picked.name : '还没选'}
-        </span>
-        <div className="gy-row">
-          <Btn onClick={() => setOpen(true)}>{picked ? '换一条' : '选参考视频'}</Btn>
-        </div>
-      </Card>
-      {open && (
-        <ReferencePicker
-          selectedId={picked?.assetId}
-          onClose={() => setOpen(false)}
-          onPick={(item) => {
-            setPicked(item);
-            setOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }

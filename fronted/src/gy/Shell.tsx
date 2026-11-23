@@ -23,6 +23,7 @@ import {
 import type { Client } from '../types';
 import ProductSidebar from '../pages/products/Sidebar';
 import ReferenceSidebar from '../pages/references/Sidebar';
+import ProjectSidebar from '../pages/projects/Sidebar';
 
 type Icon = ComponentType<{ size?: number; 'aria-hidden'?: boolean | 'true' }>;
 type NavItem = { to: string; label: string; icon: Icon; also?: string[] };
@@ -40,7 +41,17 @@ export const SECTIONS: Section[] = [
     key: 'proj',
     label: '项目',
     home: '/',
-    paths: ['/', '/projects', '/tasks', '/content', '/batch', '/studio', '/presets'],
+    paths: [
+      '/',
+      '/p',
+      '/campaigns',
+      '/projects',
+      '/tasks',
+      '/content',
+      '/batch',
+      '/studio',
+      '/presets',
+    ],
     groups: [
       [
         '项目',
@@ -211,7 +222,9 @@ export default function Shell({
       </header>
       <div className="gy-body">
         <aside className="gy-side gy-new" aria-label={`${section.label}导航`}>
-          {section.key === 'goods' ? (
+          {section.key === 'proj' ? (
+            <ProjectSidebar />
+          ) : section.key === 'goods' ? (
             <ProductSidebar />
           ) : section.key === 'refs' ? (
             <ReferenceSidebar />

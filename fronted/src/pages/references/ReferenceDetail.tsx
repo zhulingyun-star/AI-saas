@@ -416,10 +416,7 @@ export default function ReferenceDetail() {
           </Btn>
           <Btn
             variant="primary"
-            onClick={() => {
-              notify(`新建项目后选“视频二创”，再选「${d.name}」这条参考视频`);
-              navigate('/');
-            }}
+            onClick={() => navigate(`/p/new?mode=remake&reference=${encodeURIComponent(id)}`)}
           >
             用它新建项目
           </Btn>
@@ -477,10 +474,10 @@ export default function ReferenceDetail() {
                   <Link
                     key={`${u.kind}:${u.id}`}
                     className="it"
-                    to={u.kind === 'campaign' ? `/projects/${u.id}` : `/studio/${u.id}`}
+                    to={u.kind === 'campaign' ? `/projects/${u.id}` : `/p/${u.id}`}
                   >
                     {u.name}
-                    <small>{u.kind === 'campaign' ? '项目' : '作品'}</small>
+                    <small>{u.kind === 'campaign' ? '交付项目' : '项目'}</small>
                   </Link>
                 ))}
               </div>

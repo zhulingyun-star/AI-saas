@@ -34,14 +34,15 @@ public class VideoApiClient {
     public String model() { return model; }
 
     public String defaultResolution(){return size.startsWith("480")?"480p":size.startsWith("1080")?"1080p":"720p";}
-    public String submit(String prompt, int seconds, List<String> references,String resolution) {
+    public String submit(String prompt, int seconds, List<String> references,String resolution,String ratio) {
         if(seconds<4||seconds>30)throw Store.bad("视频生成支持4至30秒");
         if(prompt==null||prompt.isBlank()||prompt.length()>5000)throw Store.bad("视频提示词须为1至5000字");
         if(!Set.of("480p","720p","1080p").contains(resolution))throw Store.bad("视频清晰度无效");
+        if(!Set.of("9:16","16:9").contains(ratio))throw Store.bad("视频画幅无效");
         if(references==null||references.isEmpty()||references.size()>30)throw Store.bad("请提供1至30张商品参考图");
         for(String ref:references){java.net.URI uri;try{uri=java.net.URI.create(ref);}catch(Exception e){throw Store.bad("商品参考图链接无效");}if(!"https".equals(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw Store.bad("视频通道要求HTTPS商品图片链接，不接受Base64");}
         Map<String,Object> body=new LinkedHashMap<>();body.put("model",model.replaceFirst("-(480p|720p|1080p)$","")+"-"+resolution);
-        body.put("prompt",prompt);body.put("duration",seconds);body.put("ratio","9:16");body.put("resolution",resolution);body.put("referenceImages",references);
+        body.put("prompt",prompt);body.put("duration",seconds);body.put("ratio",ratio);body.put("resolution",resolution);body.put("referenceImages",references);
         JsonNode response = http.post().uri("/videos").contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(JsonNode.class);
         JsonNode root=response==null?null:response.has("data")&&response.path("data").isObject()?response.path("data"):response;
         String id = root == null ? null : text(root, "id");

@@ -57,7 +57,7 @@ class VideoApiClientTest {
 
     @Test void submitsOncePollsAndDownloadsWithoutExposingCredentials() throws Exception {
         String reference = "https://example.oss-cn-hangzhou.aliyuncs.com/product.jpg?Expires=123&Signature=test";
-        String id = client.submit("test prompt", 4, java.util.List.of(reference), "480p");
+        String id = client.submit("test prompt", 4, java.util.List.of(reference), "480p","9:16");
         assertThat(id).isEqualTo("video-task-1");
         assertThat(authorization.get()).isEqualTo("Bearer test-key");
         var payload=new ObjectMapper().readTree(requestBody.get());
@@ -70,9 +70,15 @@ class VideoApiClientTest {
         assertThat(authorization.get()).isEqualTo("Bearer test-key");
     }
     @Test void neverFallsBackWhenReferenceOrParametersAreInvalid(){
-        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",4,java.util.List.of(),"480p")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
-        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",3,java.util.List.of("data:image/png;base64,AQI="),"480p")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
-        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",4,java.util.List.of("data:image/png;base64,AQI="),"480p")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",4,java.util.List.of(),"480p","9:16")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",3,java.util.List.of("data:image/png;base64,AQI="),"480p","9:16")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",4,java.util.List.of("data:image/png;base64,AQI="),"480p","9:16")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->client.submit("prompt",4,java.util.List.of("https://example.com/a.jpg"),"480p","1:1")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         assertThat(requestBody.get()).isNull();
+    }
+    @Test void sendsLandscapeRatioWhenProjectAsksForIt() throws Exception {
+        client.submit("prompt",5,java.util.List.of("https://example.oss-cn-hangzhou.aliyuncs.com/a.jpg"),"1080p","16:9");
+        var payload=new ObjectMapper().readTree(requestBody.get());
+        assertThat(payload.path("ratio").asText()).isEqualTo("16:9");assertThat(payload.path("resolution").asText()).isEqualTo("1080p");assertThat(payload.path("model").asText()).isEqualTo("seedance-2.5-m2-1080p");
     }
 }

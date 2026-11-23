@@ -3,7 +3,7 @@ export function ProductionNav() {
   return (
     <div className="section-tabs">
       {[
-        ['/', '项目总览'],
+        ['/campaigns', '项目总览'],
         ['/tasks', '我的待办'],
         ['/queue', '生成任务'],
         ['/review', '审片交付'],

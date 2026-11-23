@@ -20,6 +20,7 @@ import {
 import { useProduct } from './useProduct';
 import { PersonasCard, UnderstandingCard } from './Understanding';
 import ImageViewer from './ImageViewer';
+import ProductProjects from './ProductProjects';
 
 const TABS = ['商品分析', '图片说明'] as const;
 type Tab = (typeof TABS)[number];
@@ -896,6 +897,7 @@ export default function ProductDetail() {
           {analysisTab}
           <UnderstandingCard anchor={anchor} />
           <PersonasCard anchor={anchor} />
+          <ProductProjects anchor={anchor} />
         </div>
       ) : (
         imagesTab

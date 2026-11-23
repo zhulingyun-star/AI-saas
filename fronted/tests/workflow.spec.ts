@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
     .getByLabel('密码', { exact: true })
     .fill(process.env.E2E_PASSWORD ?? 'change-me-local');
   await page.getByRole('button', { name: '进入工作空间' }).click();
-  await expect(page.getByRole('heading', { name: '项目总览', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '全部项目', exact: true })).toBeVisible();
 });
 
 test('delivery project → work → shot edit → MP4 → review and fixed delivery count', async ({
@@ -22,7 +22,7 @@ test('delivery project → work → shot edit → MP4 → review and fixed deliv
   await dialog.locator('input[type=file]').setInputFiles(path.resolve('public/demo/shirt.jpg'));
   await dialog.getByRole('button', { name: '上传到客户空间' }).click();
   await expect(dialog).toBeHidden();
-  await page.goto('/');
+  await page.goto('/campaigns');
   await page.getByRole('button', { name: '新建交付项目', exact: true }).first().click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('项目名称').fill(campaign);
@@ -72,7 +72,7 @@ test('delivery project → work → shot edit → MP4 → review and fixed deliv
   );
   expect(await srt.text()).toContain('这一镜只展示领口细节。');
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.goto('/');
+  await page.goto('/campaigns');
   await expect(page.getByRole('row').filter({ hasText: campaign })).toContainText('1 / 3');
 });
 

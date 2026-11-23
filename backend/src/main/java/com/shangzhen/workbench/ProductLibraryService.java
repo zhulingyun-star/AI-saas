@@ -48,8 +48,9 @@ public class ProductLibraryService {
         Map<String,Integer> personaCounts=new HashMap<>();
         for(Map<String,Object> row:s.db.queryForList("SELECT group_id,COUNT(*) AS n FROM product_personas WHERE client_id=? GROUP BY group_id",client)) personaCounts.put(row.get("group_id").toString(),((Number)row.get("n")).intValue());
         Map<String,Set<String>> projects=new HashMap<>();
-        for(Map<String,Object> row:s.db.queryForList("SELECT cp.anchor_id,cp.campaign_id FROM campaign_products cp JOIN campaigns c ON c.id=cp.campaign_id WHERE c.client_id=?",client)) {
-            String key=keyOfAsset.get(row.get("anchor_id").toString());if(key!=null) projects.computeIfAbsent(key,k->new HashSet<>()).add(row.get("campaign_id").toString());
+        // 关联项目：新版项目（作品）里记下的商品；按商品组去重计数
+        for(Models.Project p:s.db.query("SELECT * FROM projects WHERE client_id=?",s.projects,client)) {
+            String key=keyOfAsset.get(Objects.toString(p.config().get("productAnchorId"),""));if(key!=null) projects.computeIfAbsent(key,k->new HashSet<>()).add(p.id());
         }
         Map<String,Object> products=new LinkedHashMap<>();
         for(var entry:groups.entrySet()) {

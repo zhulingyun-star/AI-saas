@@ -102,6 +102,7 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 | DELETE `/product-folders/{id}` | 只能删除没有子文件夹、没有商品的文件夹，204 |
 | PUT `/product-groups/{anchor}/folder` | `{folderId}` 移动商品；`folderId` 为空表示放回未分类。一个商品只在一个文件夹 |
 | PUT `/product-groups/{anchor}/review` | `{confirmed:[条目键...],reviewed}` 保存分析核对进度；`reviewed=true` 记录本次分析时间，重新分析后自动回到待核对 |
+| GET `/product-groups/{anchor}/projects` | （V10）用到这个商品（同一组商品图）的项目，字段同 `/project-library` 里的项目，按更新时间倒序。`projectCount` 从 V10 起也按项目（作品）里记下的 `productAnchorId` 计数，不再按交付项目绑定计数 |
 | GET `/product-groups/{anchor}/understanding` | 商品理解与目标人群。未保存时 `understanding` 为根据商品分析确定性推导的内容（`source=DERIVED`，`saved=false`），`personas` 为推导出的建议人群（无 id，`personasSaved=false`） |
 | PUT `/product-groups/{anchor}/understanding` | `{understanding:{core,sub,pain,obj,scene,when},revision}`；首次保存 revision=0，之后用返回的 revision，冲突 409。每类最多 12 个标签、每个最多 60 字 |
 | POST `/product-groups/{anchor}/understanding/extract` | `{revision}` 重新提取。配置了文字模型时调用 AiService（结果中出现分析里没有的价格、优惠、功效、产地等字眼会被丢弃，`source=AI`）；`AI_MODE=local` 时按分析结果确定性推导（`source=DERIVED`）。没有分析结果返回 400 |
@@ -136,3 +137,31 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 - 删除参考视频（原接口）时一并删除它的库信息；被改编稿或作品引用的仍然不能删（409）。
 
 新表：`reference_folders`（文件夹）、`reference_profiles`（所在文件夹、显示名、开头类型、每镜任务 JSON、revision）。
+
+## 项目（新版，V10）
+
+新的「项目」= 一个商品 + 一种创作方式，就是 `projects` 表里的一行（原来叫作品）。不再经过交付项目：新建的项目 `work_flow.campaign_id` 为空，`campaigns` 及其接口保持不变，旧页面仍可用。以下仍以 `/api/clients/{clientId}` 为前缀，均校验客户所有者，写操作需要 CSRF。
+
+| 接口 | 请求与语义 |
+| --- | --- |
+| GET `/project-library` | `{folders, projects:[项目], videoEnabled, aiEnabled}`。项目：`{id,name,revision,mode,flow,legacyPath,folderId,product:{anchorId,groupId,name,sku,coverId,imageIds}|null,reference:{assetId,name}|null,ratio,resolution,duration,status,storyboardConfirmed,storyboardSaved,versions:{count,running,unreviewed,usable,latestStatus},updatedAt,createdAt}`。`mode` 为 `REMAKE`/`FRAMEWORK`/`ONE_CLICK`/`OTHER`（由 `config.creationMode`/`productionMode` 判断）；`flow=true` 表示能用新版四步详情打开（视频二创且记下了商品和参考视频，包括旧流程出片时建的作品），否则前端去 `legacyPath`（框架模式、一键成片和其他作品进 `/studio/{id}`，旧二创草稿回交付项目里的二创页） |
+| POST `/project-library/projects` | `{mode,productAnchorId,referenceAssetId?,ratio,resolution,folderId?,name?,facts,factsConfirmed}` 新建。`ratio` 只能 `9:16`/`16:9`，`resolution` 只能 `480p`/`720p`/`1080p`；`facts` 不能为空且 `factsConfirmed=true`。视频二创要选已拆解完的参考视频（否则 400），时长跟参考视频走（向上取整）。不提交任何生成任务。配置写入 `projects.config`：`flowVersion=2,productAnchorId,productName,productAssetIds,productCoverId,videoRatio,videoResolution`，二创另有 `creationMode=VIDEO_REMAKE,referenceAssetId,referenceLinks`，框架 / 一键另有 `creationMode=ECOMMERCE_VIDEO,productionMode` |
+| POST / PUT / DELETE `/project-folders[/{id}]` | 项目文件夹，规则与商品库相同（`LibraryFolders`）；`全部项目`、`未分类` 为固定名称 |
+| PUT `/projects/{id}/folder` | `{folderId}` 移动；为空表示未分类 |
+| PUT `/projects/{id}/name` | `{name,revision}` 改名（1–150 字），revision 为项目的 revision，冲突 409 |
+| GET `/projects/{id}/flow` | 视频二创详情（`flow=false` 的项目返回 400，消息里带旧页面地址）：`{project,revision,settings:{ratio,resolution,personaId,personaName,approach,facts},product:{...,analysis:{status,revision,stale,hasReport,category,appearance,risks,hasPrice},personas},reference:{参考视频详情,report,boardRevision},legacyApproach,storyboard:{saved,confirmed,revision,stale,shots},ignores,targetDuration,draftSegments,versions,videoEnabled,aiEnabled}` |
+| PUT `/projects/{id}/settings` | `{revision,name?,ratio?,resolution?,personaId?,personaName?,approach?}`，没传的字段不变，`personaName=""` 清除人群。画幅分辨率只影响之后出的版本 |
+| PUT `/projects/{id}/product` | `{anchorId,revision}` 换商品：分镜回到未确认，人群清空 |
+| PUT `/projects/{id}/reference` | `{assetId,revision}` 换参考视频（必须已拆解）：分镜和忽略记录清空，按新视频重来 |
+| PUT `/projects/{id}/storyboard` | `{revision,shots:[{id,camera,visual,lines,task}],confirmed}`。镜头 id 和顺序必须与当前分镜一致（不能增删镜头，台词可增删，每镜最多 8 句、每句 120 字）；`task` 只能取 7 种每镜任务或空；`confirmed=true` 时每镜都要写画面。首次保存 revision=0，冲突 409 |
+| POST `/projects/{id}/storyboard/reset` | `{revision}` 参考视频重新拆解后按新拆解重做（删除已保存的分镜） |
+| POST `/projects/{id}/storyboard/draft` | `{revision}` 让 AI 按商品写每镜的改成和改编思路；`AI_MODE=local` 返回 503 并且不改动 |
+| POST `/projects/{id}/ad-ignores` | `{key}` 记一条广告用语检查的「没问题，忽略」，返回全部 key。key 由前端生成（哪一句、哪个词、位置、句子哈希），句子改了自动失效 |
+| POST `/projects/{id}/versions` | `{segments:[{key,title,text}],note?,basedOn?,confirmed:true}` 出一版。分镜必须已确认；时长 4–30 秒；出片词合计不超过 5000 字；第二版起 `note` 必填。之前审片评为「差」的原因会作为 `avoid` 段自动加在最后。把出片词、分段、改动说明、`basedOnJobId`、`carriedReasons`、当前画幅分辨率写进 `projects.config` 后走原来的 `ProjectService.submit(VIDEO_API)`：视频接口未启用时任务是 `BLOCKED`（未发出请求）。有排队 / 生成中的版本，或提交结果不确定的 `BLOCKED` 版本时返回 409 |
+| POST `/projects/{id}/versions/rewrite` | `{basedOn,instruction}` 一句话让 AI 改某一版的出片词，只返回 `{segments,note}` 给用户看，不出片；`AI_MODE=local` 返回 503 |
+| PUT `/jobs/{id}/verdict` | `{rating:GOOD|BAD|null,reason,use:USABLE|DISCARDED|null,revision}` 单独审片。只有出好的版本能审；`BAD` 必须写原因；首次 revision=0，冲突 409 |
+| POST `/jobs/{id}/cancel` | 取消：`QUEUED` 直接不发；`BLOCKED` 标为已取消；`VIDEO_API` 的 `RUNNING` 只停止等待（供应商可能仍在生成）；本地粗剪运行中和已结束的返回 400。状态记为 `CANCELLED`，轮询结果不会再覆盖它 |
+
+- 版本 = `jobs` 一行，`no` 为任务的 revision（同一项目递增）。每版的出片词、分段、画幅分辨率、改动说明从任务快照（`jobs.snapshot` 的 `config`）读，旧流程出的版本按空行把整段出片词切成段。
+- 出片请求现在把项目的画幅（`config.videoRatio`）作为 `ratio` 传给视频接口（原来固定 9:16），分辨率仍是 `config.videoResolution`。`VIDEO_API_SIZE` 只在作品没选分辨率时决定默认值。
+- 新表：`project_folders`、`project_profiles`（项目所在文件夹）、`project_storyboards`（分镜：每镜原视频快照 + 改成的机位 / 画面 / 台词 / 任务，`confirmed`、`revision`、拆解来源 revision）、`project_ad_ignores`（忽略记录）、`job_verdicts`（每版审片：评价、原因、可投放 / 不用了、revision）。画幅、分辨率、给谁看、改编思路继续放在 `projects.config`，不新增列。

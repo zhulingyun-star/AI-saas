@@ -52,7 +52,7 @@ class RemakeDraftTest {
   assertThat(sourcePrompt("ad-remake-copy.txt")).contains("字数贴近原句");assertThat(sourcePrompt("ad-remake-use.txt")).contains("使用方式卡");assertThat(sourcePrompt("ad-remake-body.txt")).contains("出片词");
   verify(service).ask(any(),contains("字数贴近原句"));verify(service).ask(any(),contains("使用方式卡"));verify(service).reply(any(),contains("时间轴:切镜是硬边界"));
   int renderRev=rev();var rendered=(Map<?,?>)service.render(c,p,a,g,"admin",new RemakeDraftController.Render(renderRev,true,"480p"));String id=rendered.get("projectId").toString();var work=s.project(c,id);
-  assertThat(work.config().get("generationPrompt")).isEqualTo(prompt);assertThat(work.config().get("productAssetIds")).isEqualTo(List.of(g));assertThat(work.config().get("videoResolution")).isEqualTo("480p");verify(video,never()).submit(anyString(),anyInt(),anyList(),anyString());
+  assertThat(work.config().get("generationPrompt")).isEqualTo(prompt);assertThat(work.config().get("productAssetIds")).isEqualTo(List.of(g));assertThat(work.config().get("videoResolution")).isEqualTo("480p");verify(video,never()).submit(anyString(),anyInt(),anyList(),anyString(),anyString());
   assertThat(JobWorker.subtitles(work)).contains("00:00:00,000 --> 00:00:05,000","这是我们确认的台词").doesNotContain("原片台词");
   assertThatThrownBy(()->service.render(c,p,a,g,"admin",new RemakeDraftController.Render(renderRev,true,"480p"))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
   assertThatThrownBy(()->service.render(c,p,a,g,"admin",new RemakeDraftController.Render(rev(),true,"480p"))).hasMessageContaining("已有视频任务");

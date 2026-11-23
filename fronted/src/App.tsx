@@ -23,7 +23,9 @@ import ProductDetail from './pages/products/ProductDetail';
 import ProductReview from './pages/products/ProductReview';
 import ReferenceList from './pages/references/ReferenceList';
 import ReferenceDetail from './pages/references/ReferenceDetail';
-import { ReferencePickerDemo } from './pages/references/ReferencePicker';
+import ProjectList from './pages/projects/ProjectList';
+import ProjectNew from './pages/projects/ProjectNew';
+import ProjectDetail from './pages/projects/ProjectDetail';
 export default function App() {
   const cache = useQueryClient();
   const navigate = useNavigate();
@@ -129,7 +131,11 @@ export default function App() {
         }}
       >
         <Routes>
-          <Route path="/" element={<Legacy page={<Campaigns />} />} />
+          <Route path="/" element={<ProjectList />} />
+          <Route path="/p/new" element={<ProjectNew />} />
+          <Route path="/p/:id" element={<ProjectDetail />} />
+          {/* 旧的交付项目列表（新界面不再露出这一层，地址保留） */}
+          <Route path="/campaigns" element={<Legacy page={<Campaigns />} />} />
           <Route path="/projects/:id" element={<Legacy page={<CampaignDetail />} />} />
           <Route path="/projects/:id/remake" element={<Legacy page={<VideoRemake />} />} />
           <Route
@@ -160,9 +166,6 @@ export default function App() {
           <Route path="/references/:id" element={<ReferenceDetail />} />
           {/* 旧的参考片拆解页地址，跳到新的参考视频库 */}
           <Route path="/reference" element={<Navigate to="/references" replace />} />
-          {import.meta.env.DEV && (
-            <Route path="/dev/reference-picker" element={<ReferencePickerDemo />} />
-          )}
           <Route path="/analytics" element={<Legacy page={<Analytics />} />} />
           <Route path="/presets" element={<Legacy page={<Presets />} />} />
           <Route path="*" element={<Navigate to="/" replace />} />

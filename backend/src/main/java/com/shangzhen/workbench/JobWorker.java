@@ -60,20 +60,21 @@ public class JobWorker {
                 long total=0;
                 for(String id:ids){Asset a=s.asset(p.clientId(),id);if(!a.mime().startsWith("image/"))throw Store.bad("仅支持图片参考，请重新选择商品图片");byte[] bytes=images.readImage(media.assetPath(p.clientId(),id));total+=bytes.length;if(total>20*1024*1024)throw Store.bad("商品参考图总量超过20MB，请减少图片");references.add(oss.publish(p.clientId(),bytes));}
             }catch(Exception e){String message=e instanceof IllegalStateException&&e.getMessage().startsWith("OSS")?e.getMessage():"商品参考图准备失败；请核对图片和OSS配置，未向视频供应商提交";s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?",message,Store.now(),task.id());return;}
-            externalId=video.submit(prompt,p.duration(),references,Objects.toString(p.config().get("videoResolution"),video.defaultResolution()));
-            s.db.update("UPDATE jobs SET external_task_id=?,progress=10,message='供应商已受理任务，等待生成；不会重复提交',updated_at=? WHERE id=?",externalId,Store.now(),task.id());
+            externalId=video.submit(prompt,p.duration(),references,Objects.toString(p.config().get("videoResolution"),video.defaultResolution()),ratio(p));
+            s.db.update("UPDATE jobs SET external_task_id=? WHERE id=?",externalId,task.id());
+            s.db.update("UPDATE jobs SET progress=10,message='供应商已受理任务，等待生成；不会重复提交',updated_at=? WHERE id=? AND status='RUNNING'",Store.now(),task.id());
             return;
         }
         VideoApiClient.VideoStatus state=video.status(externalId);
         if(Set.of("queued","pending","in_progress","processing").contains(state.status())) {
-            s.db.update("UPDATE jobs SET progress=?,message=?,updated_at=? WHERE id=?",Math.min(95,Math.max(10,state.progress())),"Seedance 正在生成（供应商任务已保存）",Store.now(),task.id());
+            s.db.update("UPDATE jobs SET progress=?,message=?,updated_at=? WHERE id=? AND status='RUNNING'",Math.min(95,Math.max(10,state.progress())),"Seedance 正在生成（供应商任务已保存）",Store.now(),task.id());
         } else if(state.status().equals("completed")) {
             byte[] bytes=video.download(externalId);
             Files.write(media.resolve(task.id()+".mp4"),bytes,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING);
             Files.writeString(media.resolve(task.id()+".srt"),subtitles(p),StandardCharsets.UTF_8);
-            s.db.update("UPDATE jobs SET status='REVIEW',progress=100,message='Seedance 视频已生成，请人工审片；字幕为独立 SRT',output_name=?,updated_at=? WHERE id=?",task.id()+".mp4",Store.now(),task.id());
+            s.db.update("UPDATE jobs SET status='REVIEW',progress=100,message='Seedance 视频已生成，请人工审片；字幕为独立 SRT',output_name=?,updated_at=? WHERE id=? AND status='RUNNING'",task.id()+".mp4",Store.now(),task.id());
         } else if(Set.of("failed","cancelled","canceled").contains(state.status())) {
-            s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=?","视频生成失败；请检查供应商任务详情。系统未降级为纯文字生成",Store.now(),task.id());
+            s.db.update("UPDATE jobs SET status='FAILED',message=?,updated_at=? WHERE id=? AND status='RUNNING'","视频生成失败；请检查供应商任务详情。系统未降级为纯文字生成",Store.now(),task.id());
         } else {
             s.db.update("UPDATE jobs SET message='供应商返回未知状态；保留任务编号等待核对，不会重新提交',updated_at=? WHERE id=?",Store.now(),task.id());
         }
@@ -83,7 +84,7 @@ public class JobWorker {
         StringBuilder prompt=new StringBuilder("制作一条电商商品短视频。平台：").append(p.platform()).append("；类目：").append(p.category())
                 .append("；商品：").append(p.name()).append("；已确认事实：").append(p.facts()).append("。不得添加未确认的功效、价格或规格。分镜：");
         if(p.config().get("creativeFramework") instanceof Map<?,?> framework)prompt.append("创作框架：").append(Objects.toString(framework.get("title"),"")).append("；").append(Objects.toString(framework.get("summary"),"")).append("。\n");
-        prompt.append("竖屏9:16，成片总长").append(p.duration()).append("秒，商品外形和配色与参考图片保持一致。不要把产品印字当字幕或后期花字。\n");
+        prompt.append("16:9".equals(ratio(p))?"横屏16:9":"竖屏9:16").append("，成片总长").append(p.duration()).append("秒，商品外形和配色与参考图片保持一致。不要把产品印字当字幕或后期花字。\n");
         int elapsed=0;
         for(int i=0;i<p.shots().size();i++) {
             Shot shot=p.shots().get(i);
@@ -93,6 +94,8 @@ public class JobWorker {
         }
         if(prompt.length()>5000)throw Store.bad("视频提示词超过5000字，请精简");return prompt.toString();
     }
+    /** 画幅：项目里选的竖屏 9:16 或横屏 16:9，没选过的旧作品按竖屏。 */
+    static String ratio(Project p){return "16:9".equals(p.config().get("videoRatio"))?"16:9":"9:16";}
     static List<String> referenceIds(Project p){
         if(p.config().get("productAssetIds") instanceof List<?> ids)return ids.stream().map(Object::toString).distinct().toList();
         return p.shots().stream().map(Shot::assetId).filter(id->id!=null&&!id.isBlank()).distinct().toList();

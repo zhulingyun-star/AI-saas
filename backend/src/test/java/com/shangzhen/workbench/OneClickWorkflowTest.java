@@ -35,7 +35,7 @@ class OneClickWorkflowTest {
         path="/api/clients/"+client+"/projects/one-click";
         when(ai.enabled()).thenReturn(true);when(video.enabled()).thenReturn(true);when(oss.enabled()).thenReturn(true);
         when(ai.oneClickDraft(any())).thenReturn(new AiService.OneClickDraft("细节证据","先整体再细节",List.of(new AiService.DraftShot(2,"双鞋平放，展示整体配色","看看这双鞋"),new AiService.DraftShot(2,"鞋面拼接近景，固定机位","灰白拼接层次清楚"))));
-        when(video.defaultResolution()).thenReturn("480p");when(video.submit(anyString(),anyInt(),anyList(),anyString())).thenReturn("task-oneclick");
+        when(video.defaultResolution()).thenReturn("480p");when(video.submit(anyString(),anyInt(),anyList(),anyString(),anyString())).thenReturn("task-oneclick");
         when(images.readImage(any())).thenReturn(new byte[]{1,2,3});when(oss.publish(eq(client),any())).thenReturn("https://example.oss-cn-hangzhou.aliyuncs.com/product.jpg");
     }
 
@@ -50,7 +50,7 @@ class OneClickWorkflowTest {
         Job job=s.job(client,id);assertThat(job.status()).isEqualTo("RUNNING");
         Project saved=s.project(client,job.projectId());assertThat(saved.shots()).hasSize(2);
         assertThat(saved.config().get("creativeFramework")).isInstanceOf(Map.class);
-        verify(video).submit(argThat(prompt->prompt.contains("0–2秒")&&prompt.contains("2–4秒")&&prompt.contains("看看这双鞋")&&prompt.contains("灰白拼接层次清楚")),eq(4),argThat(refs->refs.size()==1),eq("480p"));
+        verify(video).submit(argThat(prompt->prompt.contains("0–2秒")&&prompt.contains("2–4秒")&&prompt.contains("看看这双鞋")&&prompt.contains("灰白拼接层次清楚")),eq(4),argThat(refs->refs.size()==1),eq("480p"),eq("9:16"));
         Project snapshot=s.snapshot(s.db.queryForObject("SELECT snapshot FROM jobs WHERE id=?",String.class,id));
         assertThat(snapshot.shots()).isEqualTo(saved.shots());
         when(video.status("task-oneclick")).thenReturn(new VideoApiClient.VideoStatus("completed",100,""));
@@ -59,21 +59,21 @@ class OneClickWorkflowTest {
         assertThat(s.job(client,id).status()).isEqualTo("REVIEW");assertThat(s.job(client,id).hasOutput()).isTrue();
         assertThat(Files.readAllBytes(media.resolve(id+".mp4"))).isEqualTo(providerBytes);
         assertThat(Files.readString(media.resolve(id+".srt"))).contains("看看这双鞋","灰白拼接层次清楚");
-        verify(ai,times(1)).oneClickDraft(any());verify(video,times(1)).submit(anyString(),anyInt(),anyList(),anyString());
+        verify(ai,times(1)).oneClickDraft(any());verify(video,times(1)).submit(anyString(),anyInt(),anyList(),anyString(),anyString());
     }
 
     @Test void modelFailureKeepsProjectAndDoesNotSubmitOrAutomaticallyRetry() throws Exception {
         when(ai.oneClickDraft(any())).thenThrow(new IllegalStateException("model failed"));
         String id=start(input);worker.tick();worker.tick();
         assertThat(s.job(client,id).status()).isEqualTo("FAILED");assertThat(s.project(client,s.job(client,id).projectId()).facts()).isEqualTo(input.facts());
-        verify(ai,times(1)).oneClickDraft(any());verify(video,never()).submit(anyString(),anyInt(),anyList(),anyString());
+        verify(ai,times(1)).oneClickDraft(any());verify(video,never()).submit(anyString(),anyInt(),anyList(),anyString(),anyString());
     }
 
     @Test void userEditDuringQueuedTaskIsPreservedWithoutSubmitting() throws Exception {
         String id=start(input);String work=s.job(client,id).projectId();
         s.db.update("UPDATE projects SET facts='用户修改的资料',revision=revision+1 WHERE id=?",work);worker.tick();
         assertThat(s.job(client,id).status()).isEqualTo("FAILED");assertThat(s.project(client,work).facts()).isEqualTo("用户修改的资料");
-        verify(ai,never()).oneClickDraft(any());verify(video,never()).submit(anyString(),anyInt(),anyList(),anyString());
+        verify(ai,never()).oneClickDraft(any());verify(video,never()).submit(anyString(),anyInt(),anyList(),anyString(),anyString());
     }
 
     @Test void unavailableStorageInvalidDurationAndMissingConsentCreateNothing() throws Exception {

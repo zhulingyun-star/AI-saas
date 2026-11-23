@@ -402,7 +402,7 @@ test('detail: tabs, hook type and per-shot tasks, rename, delete and new project
 
   await page.getByRole('button', { name: '查看参考视频 outfit.mp4' }).click();
   await page.getByRole('button', { name: '用它新建项目' }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/p\/new\?mode=remake&reference=r2$/);
 });
 
 test('rename from a card hover pencil (Esc cancels, Enter saves)', async ({ page }) => {
@@ -426,8 +426,9 @@ test('picker dialog: folders, search, pick, and upload inside the dialog', async
   const state = await mockRefs(page);
   state.folders.push({ id: 'f1', parentId: null, name: '美妆护肤', sortOrder: 0, revision: 0 });
   state.profile.r1 = { folderId: 'f1', tasks: {}, revision: 0 };
-  await page.goto('/dev/reference-picker');
-  await page.getByRole('button', { name: '选参考视频' }).click();
+  // 走真实的新建项目页（视频二创）里的「选一条参考视频」
+  await page.goto('/p/new?mode=remake');
+  await page.getByRole('button', { name: /选一条参考视频/ }).click();
   const dialog = page.getByRole('dialog', { name: '选择参考视频' });
   await expect(dialog.getByRole('radio')).toHaveCount(2);
   await dialog.getByRole('button', { name: '美妆护肤' }).click();
@@ -438,7 +439,7 @@ test('picker dialog: folders, search, pick, and upload inside the dialog', async
   await dialog.getByRole('radio', { name: 'outfit.mp4' }).click();
   await expect(dialog).toContainText('已选：outfit.mp4');
   await dialog.getByRole('button', { name: '用这条' }).click();
-  await expect(page.locator('.gy-page [role=status]')).toContainText('当前参考视频：outfit.mp4');
+  await expect(page.locator('.gy-refv')).toContainText('outfit.mp4');
 
   await page.getByRole('button', { name: '换一条' }).click();
   await expect(dialog.getByRole('radio', { name: 'outfit.mp4' })).toHaveAttribute(
@@ -452,7 +453,7 @@ test('picker dialog: folders, search, pick, and upload inside the dialog', async
     .setInputFiles(path.resolve('tests/fixtures/remake-test.mp4'));
   await dialog.getByLabel('名称').fill('弹窗里上传的');
   await dialog.getByRole('button', { name: '上传并选用' }).click();
-  await expect(page.locator('.gy-page [role=status]')).toContainText('当前参考视频：弹窗里上传的');
+  await expect(page.locator('.gy-refv')).toContainText('弹窗里上传的');
   expect(state.refs.map((r) => r.id)).toContain('r3');
   await page.goto('/references');
   await expect(page.getByRole('listitem').filter({ hasText: '弹窗里上传的' })).toContainText(

@@ -140,7 +140,7 @@ test('create campaign → select product → verify facts → remake shots → s
     if(path.endsWith('/jobs')){if(method==='POST')jobs=[{id:'job-1',projectId:'work-1',name:work.name,provider:'LOCAL',status:'QUEUED',progress:0,revision:1,message:'已排队',hasOutput:false}];return json(jobs);}
     return json([]);
   });
-  await page.goto('/');
+  await page.goto('/campaigns');
   await page.getByRole('button',{name:'新建交付项目',exact:true}).first().click();
   await expect(page.getByLabel('目标交付数量')).toHaveValue('1');
   await page.getByLabel('项目名称',{exact:true}).fill('鞋子广告项目');
