@@ -184,7 +184,7 @@ export default function ProjectNew() {
       notify(
         mode === 'REMAKE'
           ? `项目「${item.name}」已创建，先看一下方向`
-          : `项目「${item.name}」已创建，${mode === 'FRAMEWORK' ? '去选创作框架' : '在制作页里继续'}`,
+          : `项目「${item.name}」已创建，${mode === 'FRAMEWORK' ? '去出方向' : '填好设置就能出片'}`,
       );
       navigate(item.flow ? `/p/${item.id}` : item.legacyPath);
     } catch (e) {
@@ -210,8 +210,16 @@ export default function ProjectNew() {
           '确认分镜后才出片',
         ]
       : mode === 'FRAMEWORK'
-        ? ['创建项目，在制作页里生成几套创作框架', '挑一套，生成分镜', '确认分镜后才出片']
-        : ['创建项目，在制作页里继续', '自动出方案和分镜', '确认后才提交视频生成'];
+        ? [
+            '创建项目，选给谁看和时长，出几套方向',
+            '选 1~3 个方向，每个方向各写一份分镜',
+            '确认分镜后才出片',
+          ]
+        : [
+            '创建项目，填出片设置',
+            '点开始出片：自动写方向和分镜，接着出片',
+            '方向和分镜出完可以回头看、可以改',
+          ];
 
   return (
     <div className="gy-page gy-new">
@@ -324,9 +332,8 @@ export default function ProjectNew() {
               </h3>
               <div className="gy-infobox">
                 {mode === 'FRAMEWORK'
-                  ? '创建后进入制作页：根据商品事实生成几套创作框架，每套写清楚开头、结构、怎么证明卖点、怎么收尾。你挑一套再生成分镜，确认分镜之前不会出片。'
-                  : '创建后进入制作页：按商品事实自动出方案和分镜，确认后才提交视频生成。'}
-                <small>这种方式的新版详情页还在做，暂时在原来的制作页里继续。</small>
+                  ? '创建后先选给谁看和时长，按商品资料出几套方向，每套写清楚开头类型、前 3 秒怎么拍怎么说、卖点和场景。可以选几个方向一起测，每个方向各写一份分镜，确认分镜之前不会出片。'
+                  : '创建后填出片设置（给谁看、时长、风格等），点开始出片时自动写方向和分镜，接着出片。创建这一步不会出片。'}
               </div>
             </Card>
           )}
@@ -436,8 +443,8 @@ export default function ProjectNew() {
                   ? `跟参考视频走（${clock(ref.storyboard.duration)}）`
                   : '跟参考视频走'
                 : mode === 'FRAMEWORK'
-                  ? '在框架里定'
-                  : '在制作页里定'}
+                  ? '出方向时选 15 或 30 秒'
+                  : '出片设置里选 15 或 30 秒'}
             </dd>
             <dt>画面</dt>
             <dd>{formatRR(rr)}</dd>
@@ -465,8 +472,8 @@ export default function ProjectNew() {
             {mode === 'REMAKE'
               ? '创建项目，看方向'
               : mode === 'FRAMEWORK'
-                ? '创建项目，去选框架'
-                : '创建项目，去制作页'}
+                ? '创建项目，去出方向'
+                : '创建项目，去填设置'}
           </Btn>
           <span className="gy-fine">这一步不会生成视频。</span>
           {err && <Notice tone="error">{err}</Notice>}

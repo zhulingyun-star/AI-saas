@@ -91,7 +91,7 @@ export function AdText({
     </span>
   );
 }
-function FixButton({ hit, onFix }: { hit: AdHit; onFix: (h: AdHit, v: string) => void }) {
+export function FixButton({ hit, onFix }: { hit: AdHit; onFix: (h: AdHit, v: string) => void }) {
   const v = fixValue(hit.fix[0]);
   if (v === null) return <span className="gy-fine">{hit.fix[0]}</span>;
   return (
@@ -101,8 +101,120 @@ function FixButton({ hit, onFix }: { hit: AdHit; onFix: (h: AdHit, v: string) =>
   );
 }
 
+export interface AdItem {
+  lab: string;
+  text: string;
+  scope: string;
+  /** 点「定位」滚到哪个元素（id） */
+  anchor: string;
+  fix: (h: AdHit, value: string) => void;
+}
+/** 分镜步顶部的广告用语检查汇总：逐条看、替换、忽略、定位。只提醒，不拦着确认。 */
+export function AdSummary({
+  items,
+  ctx,
+  ignored,
+  onIgnore,
+  readOnly,
+}: {
+  items: AdItem[];
+  ctx: AdContext;
+  ignored: Set<string>;
+  onIgnore: (scope: string, text: string, h: AdHit) => void;
+  readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const all = items.flatMap((it) =>
+    liveHits(it.text, ctx, it.scope, ignored).map((h) => ({ ...h, it })),
+  );
+  return (
+    <Card className={`gy-pjs gy-adsum ${all.length ? 'bad' : 'ok'}`} id="adsum">
+      <div className="hd">
+        <span className="ico" aria-hidden="true">
+          {all.length ? '!' : '✓'}
+        </span>
+        <b>{all.length ? `台词里有 ${all.length} 处可能违规的说法` : '台词检查通过'}</b>
+        <small>
+          {all.length
+            ? '只是提醒，不拦着你确认'
+            : '没发现极限词、治病功效、说死的承诺、没依据的价格，也没碰到商品分析里不能说的话'}
+        </small>
+        {all.length > 0 && (
+          <Btn size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {open ? '收起' : '逐条看'}
+          </Btn>
+        )}
+      </div>
+      {open && all.length > 0 && (
+        <div className="gy-adlist">
+          {all.map((h) => (
+            <div className="gy-adrow" key={`${h.it.scope}|${h.at}|${h.word}`}>
+              <span className="where">{h.it.lab}</span>
+              <span className="ctx">
+                <AdText text={h.it.text} hits={[h]} />
+              </span>
+              <span className="why">
+                <span className="gy-adtag">{AD_CAT_LABEL[h.cat]}</span>
+                <small>{h.why}</small>
+              </span>
+              <span className="gy-row">
+                {!readOnly && <FixButton hit={h} onFix={(x, v) => h.it.fix(x, v)} />}
+                {!readOnly && (
+                  <Btn size="xs" variant="ghost" onClick={() => onIgnore(h.it.scope, h.it.text, h)}>
+                    没问题，忽略
+                  </Btn>
+                )}
+                <Btn
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    document.getElementById(h.it.anchor)?.scrollIntoView({ block: 'center' })
+                  }
+                >
+                  定位
+                </Btn>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** 15 秒、30 秒两档的转化结构骨架建议（框架模式 / 一键成片用） */
+export const SKELETON: Record<number, [string, number, number][]> = {
+  15: [
+    ['抓住注意力', 0, 3],
+    ['建立需求', 3, 5],
+    ['给出方案', 5, 8],
+    ['建立信任', 8, 11],
+    ['打消顾虑', 11, 13],
+    ['促进决定', 13, 14],
+    ['推动下单', 14, 15],
+  ],
+  30: [
+    ['抓住注意力', 0, 3],
+    ['建立需求', 3, 6],
+    ['给出方案', 6, 11],
+    ['建立信任', 11, 17],
+    ['打消顾虑', 17, 22],
+    ['促进决定', 22, 26],
+    ['推动下单', 26, 30],
+  ],
+};
+
 /** 转化结构：按时间排的每镜任务，缺哪个任务只提示，不拦着确认 */
-export function ConvBar({ shots, tasks }: { shots: StoryShot[]; tasks: string[] }) {
+export function ConvBar({
+  shots,
+  tasks,
+  skeleton,
+}: {
+  shots: StoryShot[];
+  tasks: string[];
+  /** 给了时长就在下面列出这一档的骨架建议 */
+  skeleton?: number;
+}) {
   const total = shots.length ? shots[shots.length - 1].end : 0;
   const missing = SHOT_TASKS.filter((t) => !tasks.includes(t));
   return (
@@ -133,6 +245,17 @@ export function ConvBar({ shots, tasks }: { shots: StoryShot[]; tasks: string[] 
         <span>0 秒</span>
         <span>{sec(total)} 秒</span>
       </div>
+      {skeleton && SKELETON[skeleton] && (
+        <div className="gy-cvref">
+          <b>{skeleton} 秒骨架建议</b>
+          {SKELETON[skeleton].map(([t, a, b]) => (
+            <span key={t}>
+              <i className={taskClass(t)} aria-hidden="true" />
+              {t} {a}–{b}s
+            </span>
+          ))}
+        </div>
+      )}
       <div className="gy-cvmiss">
         {missing.length ? (
           missing.map((t) => <span key={t}>还没有「{t}」的镜头</span>)
@@ -152,7 +275,6 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
   const [draft, setDraft] = useState<Edit[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [adOpen, setAdOpen] = useState(false);
   const [ignored, setIgnored] = useState<Set<string>>(() => new Set(flow.ignores));
   const [reset, setReset] = useState(false);
   const ctx: AdContext = useMemo(
@@ -338,61 +460,18 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
           可以先不管继续用；重做会按新的镜头重新开始，写过的改成会清空。
         </Notice>
       )}
-      <Card className={`gy-pjs gy-adsum ${all.length ? 'bad' : 'ok'}`} id="adsum">
-        <div className="hd">
-          <span className="ico" aria-hidden="true">
-            {all.length ? '!' : '✓'}
-          </span>
-          <b>{all.length ? `台词里有 ${all.length} 处可能违规的说法` : '台词检查通过'}</b>
-          <small>
-            {all.length
-              ? '只是提醒，不拦着你确认'
-              : '没发现极限词、治病功效、说死的承诺、没依据的价格，也没碰到商品分析里不能说的话'}
-          </small>
-          {all.length > 0 && (
-            <Btn size="xs" aria-expanded={adOpen} onClick={() => setAdOpen(!adOpen)}>
-              {adOpen ? '收起' : '逐条看'}
-            </Btn>
-          )}
-        </div>
-        {adOpen && all.length > 0 && (
-          <div className="gy-adlist">
-            {all.map((h) => (
-              <div className="gy-adrow" key={`${h.it.scope}|${h.at}|${h.word}`}>
-                <span className="where">{h.it.lab}</span>
-                <span className="ctx">
-                  <AdText text={h.it.text} hits={[h]} />
-                </span>
-                <span className="why">
-                  <span className="gy-adtag">{AD_CAT_LABEL[h.cat]}</span>
-                  <small>{h.why}</small>
-                </span>
-                <span className="gy-row">
-                  <FixButton hit={h} onFix={(x, v) => replaceIn(h.it.shot, h.it.line, x, v)} />
-                  <Btn
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => void ignore(h.it.scope, h.it.text, h)}
-                  >
-                    没问题，忽略
-                  </Btn>
-                  <Btn
-                    size="xs"
-                    variant="ghost"
-                    onClick={() =>
-                      document
-                        .getElementById(`shot-${h.it.shot + 1}`)
-                        ?.scrollIntoView({ block: 'center' })
-                    }
-                  >
-                    定位
-                  </Btn>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+      <AdSummary
+        items={items.map((it) => ({
+          lab: it.lab,
+          text: it.text,
+          scope: it.scope,
+          anchor: `shot-${it.shot + 1}`,
+          fix: (h, v) => replaceIn(it.shot, it.line, h, v),
+        }))}
+        ctx={ctx}
+        ignored={ignored}
+        onIgnore={(scope, text, h) => void ignore(scope, text, h)}
+      />
       <ConvBar shots={shots} tasks={tasks} />
       <Card className="gy-pjs">
         <h3>

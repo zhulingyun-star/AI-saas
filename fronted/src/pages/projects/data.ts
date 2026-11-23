@@ -50,6 +50,8 @@ export interface ProjectItem {
   status: string;
   storyboardConfirmed: boolean;
   storyboardSaved: boolean;
+  /** 框架模式 / 一键成片：方向数、选中的方向数、选中且分镜已确认的方向数 */
+  plan?: { directions: number; selected: number; boardsConfirmed: number };
   versions: {
     count: number;
     running: number;
@@ -109,8 +111,28 @@ export interface Version {
   carriedReasons: string[];
   segments: Segment[];
   verdict?: Verdict | null;
+  /** 框架模式 / 一键成片：这一版属于哪个方向 */
+  directionId?: string | null;
+  /** 一键成片：出这一版时的设置 */
+  oneClick?: OneClickSettings | null;
+  /** 项目里的总序号（框架模式的 no 是方向里的序号） */
+  jobNo?: number;
 }
-export interface Flow {
+export interface ProductInfo extends ProductCard {
+  analysis: {
+    status: string;
+    revision: number;
+    stale: boolean;
+    hasReport: boolean;
+    category?: string;
+    appearance?: string;
+    risks: { point?: string; why?: string }[];
+    hasPrice: boolean;
+  };
+  personas: Persona[];
+}
+/** 各种创作方式的详情都有的部分（出片步只用这些） */
+export interface BaseFlow {
   project: ProjectItem;
   revision: number;
   settings: {
@@ -121,19 +143,13 @@ export interface Flow {
     approach: string;
     facts: string;
   };
-  product: ProductCard & {
-    analysis: {
-      status: string;
-      revision: number;
-      stale: boolean;
-      hasReport: boolean;
-      category?: string;
-      appearance?: string;
-      risks: { point?: string; why?: string }[];
-      hasPrice: boolean;
-    };
-    personas: Persona[];
-  };
+  product: ProductInfo;
+  ignores: string[];
+  versions: Version[];
+  videoEnabled: boolean;
+  aiEnabled: boolean;
+}
+export interface Flow extends BaseFlow {
   reference: RefDetail & { report: StoryboardReport | null; boardRevision: number };
   legacyApproach: { relation: string; reason: string; approach: string } | null;
   storyboard: {
@@ -143,12 +159,8 @@ export interface Flow {
     shots: StoryShot[];
     stale: boolean;
   };
-  ignores: string[];
   targetDuration: number;
   draftSegments: Segment[];
-  versions: Version[];
-  videoEnabled: boolean;
-  aiEnabled: boolean;
 }
 
 const isRunning = (s?: string | null) => s === 'QUEUED' || s === 'RUNNING';
@@ -187,7 +199,7 @@ export function inFolder(projects: ProjectItem[], folders: Folder[], folder: str
   const scope = folderScope(folders, folder);
   return projects.filter((p) => !!p.folderId && scope.has(p.folderId));
 }
-/** 点项目去哪：视频二创进新版四步详情，框架模式 / 一键成片 / 其他作品暂时进旧的制作页 */
+/** 点项目去哪：新版建的项目都进四步详情；旧流程里的框架模式 / 一键成片 / 其他作品进旧的制作页 */
 export const projectPath = (p: ProjectItem) => (p.flow ? `/p/${p.id}` : p.legacyPath);
 
 /** 列表里的「进度」，只按真实记录算 */
@@ -211,8 +223,16 @@ export function progressLabel(p: ProjectItem): [string, 'ok' | 'check' | 'none']
       : p.storyboardSaved
         ? ['分镜编辑中', 'none']
         : ['待确认分镜', 'none'];
-  if (p.mode === 'FRAMEWORK') return ['待选框架', 'none'];
-  if (p.mode === 'ONE_CLICK') return ['待开始', 'none'];
+  if (p.mode === 'FRAMEWORK') {
+    const x = p.plan;
+    if (!p.flow) return ['待选框架', 'none'];
+    if (!x?.directions) return ['待出方向', 'none'];
+    if (!x.selected) return [`${x.directions} 套方向 · 待选`, 'none'];
+    if (x.boardsConfirmed < x.selected)
+      return [`${x.selected} 个方向 · 分镜 ${x.boardsConfirmed}/${x.selected} 已确认`, 'none'];
+    return [`${x.selected} 个方向 · 分镜已确认 · 待出片`, 'check'];
+  }
+  if (p.mode === 'ONE_CLICK') return ['待开始出片', 'none'];
   return ['草稿', 'none'];
 }
 
@@ -277,4 +297,114 @@ export function pairSegments(a: Segment[], b: Segment[]) {
 export function changedSegments(cur: Segment[], prev: Segment[] | undefined) {
   if (!prev) return [];
   return cur.filter((s) => prev.find((p) => p.key === s.key)?.text !== s.text);
+}
+
+// ---------- 框架模式 / 一键成片 ----------
+export interface DirectionData {
+  title: string;
+  why: string;
+  hook: string;
+  openVisual: string;
+  openLine: string;
+  structure: string;
+  points: string[];
+  scene: string;
+  contentType: string;
+  tempo: string;
+  people: string;
+  voice: string;
+  look: string;
+  ending: string;
+  personaName: string;
+  duration: number;
+}
+export interface DirectionBoard {
+  saved: boolean;
+  confirmed: boolean;
+  revision: number;
+  /** AI / LOCAL（本地模板） */
+  source: string;
+  duration: number;
+  stale: boolean;
+  shots: StoryShot[];
+  draftSegments: Segment[];
+}
+export interface DirectionRow {
+  id: string;
+  /** AI：文字模型写的；LOCAL：没配置文字模型时按商品理解拼的本地模板 */
+  source: 'AI' | 'LOCAL';
+  data: DirectionData;
+  origin: DirectionData;
+  edited: boolean;
+  selected: boolean;
+  selectOrder: number;
+  revision: number;
+  productChanged: boolean;
+  versionCount: number;
+  board: DirectionBoard;
+}
+export interface OneClickSettings {
+  personaName: string;
+  duration: number;
+  src: 'idea' | 'copy';
+  copy: string;
+  creative: string;
+  people: string;
+  voice: string;
+  tempo: string;
+  look: string;
+}
+export interface ModeFlow extends BaseFlow {
+  mode: 'FRAMEWORK' | 'ONE_CLICK';
+  settings: BaseFlow['settings'] & { duration: number; oneClick?: OneClickSettings };
+  directions: DirectionRow[];
+  options: {
+    hooks: string[];
+    contentTypes: string[];
+    tempos: string[];
+    people: string[];
+    voices: string[];
+    looks: string[];
+    endings: string[];
+    durations: number[];
+    tasks: string[];
+  };
+}
+export const isModeFlow = (f: BaseFlow): f is ModeFlow => 'directions' in f;
+/** 选中的方向按 A / B / C 排 */
+export const pickedDirections = (f: ModeFlow) =>
+  f.directions.filter((d) => d.selected).sort((a, b) => a.selectOrder - b.selectOrder);
+export const LETTERS = 'ABC';
+export const sourceLabel = (s: string) => (s === 'AI' ? 'AI 写的' : '本地模板 · 不是 AI 写的');
+/** 一键成片设置的说明（版本卡上的标签、两版的差别） */
+export function oneClickTags(o?: OneClickSettings | null) {
+  if (!o) return [];
+  return [
+    o.src === 'copy' ? '照我的文案' : '让 AI 构思',
+    `${o.duration} 秒`,
+    o.personaName ? `给「${o.personaName}」看` : '人群没指定',
+    o.people,
+    o.voice,
+    o.tempo,
+    o.look,
+    o.creative ? '有创意要求' : '',
+  ].filter(Boolean);
+}
+export function oneClickDiff(a?: OneClickSettings | null, b?: OneClickSettings | null) {
+  if (!a || !b) return [];
+  const out: string[] = [];
+  const name: Record<string, string> = {
+    personaName: '人群',
+    people: '出镜人物',
+    voice: '台词和声音',
+    tempo: '节奏',
+    look: '片种',
+  };
+  if (a.src !== b.src) out.push(`出发点 → ${b.src === 'copy' ? '照我的文案' : '让 AI 构思'}`);
+  if (a.duration !== b.duration) out.push(`时长 ${a.duration} → ${b.duration} 秒`);
+  for (const k of ['personaName', 'people', 'voice', 'tempo', 'look'] as const)
+    if (a[k] !== b[k]) out.push(`${name[k]} → ${b[k] || '交给 AI'}`);
+  if (a.copy !== b.copy) out.push('改了文案');
+  if (a.creative !== b.creative) out.push('改了创意要求');
+  return out;
 }

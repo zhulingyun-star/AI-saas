@@ -1,5 +1,7 @@
 # 电商短视频制作模式
 
+> 2026-11 更新：新版项目列表里新建的框架模式 / 一键成片已经改成四步详情（方向、每个方向的分镜存在 V11 的 `project_directions` / `project_direction_boards`），见 `docs/project-video-flow.md`「框架模式 / 一键成片」和 `backend/API.md`。下面是旧制作页（`/studio/{id}`、交付项目里的入口）的说明，旧页面和接口保留可用。
+
 项目内现有制作模式增加“框架模式”和“一键成片”，与“视频二创模式”并列。无数据库迁移：两种模式沿用 `projects`、`shots`、`jobs` 和原审片队列，作品配置标记 `creationMode=ECOMMERCE_VIDEO`，并以 `productionMode=FRAMEWORK|ONE_CLICK` 区分。
 
 ## 框架模式

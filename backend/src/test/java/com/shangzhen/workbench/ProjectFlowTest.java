@@ -106,7 +106,8 @@ class ProjectFlowTest {
         JsonNode o=json(call(post(base+"/project-library/projects"),create("ONE_CLICK","9:16")).andExpect(status().isOk()));
         assertThat(r.path("name").asText()).isEqualTo("新百伦鞋子 · 视频二创");assertThat(r.path("ratio").asText()).isEqualTo("16:9");assertThat(r.path("resolution").asText()).isEqualTo("720p");
         assertThat(r.path("duration").asInt()).isEqualTo(11);assertThat(r.path("reference").path("name").asText()).isEqualTo("防晒.mp4");
-        assertThat(f.path("flow").asBoolean()).isFalse();assertThat(f.path("legacyPath").asText()).isEqualTo("/studio/"+f.path("id").asText()+"?framework=1");
+        // 新建的框架模式 / 一键成片也进新版四步详情；旧地址仍然保留
+        assertThat(f.path("flow").asBoolean()).isTrue();assertThat(o.path("flow").asBoolean()).isTrue();assertThat(f.path("legacyPath").asText()).isEqualTo("/studio/"+f.path("id").asText()+"?framework=1");
         assertThat(o.path("legacyPath").asText()).isEqualTo("/studio/"+o.path("id").asText());assertThat(o.path("mode").asText()).isEqualTo("ONE_CLICK");
         for(JsonNode x:List.of(r,f,o)) assertThat(s.db.queryForObject("SELECT COUNT(*) FROM work_flow WHERE project_id=? AND campaign_id IS NULL",Integer.class,x.path("id").asText())).isEqualTo(1);
         assertThat(s.db.queryForObject("SELECT COUNT(*) FROM jobs WHERE client_id=?",Integer.class,client)).isZero();
@@ -121,7 +122,7 @@ class ProjectFlowTest {
         // 参考视频库能看到这条参考视频用在了哪个项目
         JsonNode refItem=json(call(get(base+"/references/"+ref),null));
         assertThat(refItem.path("usedBy").path(0).path("id").asText()).isEqualTo(r.path("id").asText());
-        call(get(base+"/projects/"+f.path("id").asText()+"/flow"),null).andExpect(status().isBadRequest());
+        call(get(base+"/projects/"+f.path("id").asText()+"/flow"),null).andExpect(status().isOk()).andExpect(jsonPath("$.mode").value("FRAMEWORK")).andExpect(jsonPath("$.directions.length()").value(0));
     }
 
     @Test void storyboardStartsFromReferenceAndSavesEditsWithRevision() throws Exception {

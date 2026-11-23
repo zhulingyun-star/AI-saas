@@ -14,7 +14,8 @@ import static com.shangzhen.workbench.Models.*;
  * 新版「项目」：一个项目 = 一个商品 + 一种创作方式，就是 projects 里的一行（作品）。
  * 不再经过交付项目（campaigns）：新建的项目 work_flow.campaign_id 为空，旧的交付项目数据和接口不动。
  * 视频二创走四步：商品 → 方向（参考视频）→ 分镜（project_storyboards）→ 出片（每一版 = jobs 一行，出片词在任务快照里）。
- * 框架模式、一键成片这里只负责新建和列表，详情仍然进旧的制作页。
+ * 框架模式、一键成片（新建的）详情在 DirectionFlowService：同样四步，方向和每个方向的分镜在 V11 的表里，出片复用这里的版本、审片和取消。
+ * 旧流程里建的框架模式 / 一键成片作品仍然进旧的制作页。
  */
 @Service
 public class ProjectFlowService {
@@ -53,11 +54,15 @@ public class ProjectFlowService {
         return "";
     }
     static String anchorOf(Project p){return str(p.config().get("productAnchorId"));}
-    /** 能用新版四步详情打开的：视频二创，并且记下了商品和参考视频（包括旧流程出片时建的作品）。 */
-    private boolean flowable(Project p,Map<String,Asset> assets){
-        if(!mode(p).equals("REMAKE")) return false;
-        Asset product=assets.get(anchorOf(p)),ref=assets.get(referenceId(p));
-        return product!=null&&product.kind().equals("PRODUCT")&&ref!=null&&ref.kind().equals("REFERENCE");
+    /** 能用新版四步详情打开的：视频二创，并且记下了商品和参考视频（包括旧流程出片时建的作品）；
+     *  框架模式 / 一键成片只算新版新建的（flowVersion=2），旧流程里建的还在旧制作页。 */
+    static boolean flowable(Project p,Map<String,Asset> assets){
+        String m=mode(p);Asset product=assets.get(anchorOf(p));
+        boolean hasProduct=product!=null&&product.kind().equals("PRODUCT");
+        if(m.equals("FRAMEWORK")||m.equals("ONE_CLICK")) return hasProduct&&"2".equals(str(p.config().get("flowVersion")));
+        if(!m.equals("REMAKE")) return false;
+        Asset ref=assets.get(referenceId(p));
+        return hasProduct&&ref!=null&&ref.kind().equals("REFERENCE");
     }
     /** 旧页面地址：框架模式、一键成片和其他作品进制作页；旧二创草稿回到交付项目里的二创页。 */
     static String legacyPath(Project p){
@@ -68,18 +73,18 @@ public class ProjectFlowService {
     }
 
     // ---------- 列表 ----------
-    private Map<String,Asset> assets(String client){
+    Map<String,Asset> assets(String client){
         Map<String,Asset> out=new HashMap<>();
         for(Asset a:s.db.query("SELECT * FROM assets WHERE client_id=? AND kind IN ('PRODUCT','REFERENCE') ORDER BY created_at,id",s.assets,client)) out.put(a.id(),a);
         return out;
     }
-    private record JobRow(String id,String project,String status,int no,boolean output,boolean submitted,String message,int progress,String created,String updated) {}
-    private List<JobRow> jobRows(String client,String project){
+    record JobRow(String id,String project,String status,int no,boolean output,boolean submitted,String message,int progress,String created,String updated) {}
+    List<JobRow> jobRows(String client,String project){
         String sql="SELECT id,project_id,status,revision,output_name,external_task_id,message,progress,created_at,updated_at FROM jobs WHERE client_id=?"+(project==null?"":" AND project_id=?")+" ORDER BY created_at DESC,id DESC";
         Object[] args=project==null?new Object[]{client}:new Object[]{client,project};
         return s.db.query(sql,(r,n)->new JobRow(r.getString(1),r.getString(2),r.getString(3),r.getInt(4),r.getString(5)!=null,r.getString(6)!=null,r.getString(7),r.getInt(8),r.getTimestamp(9).toLocalDateTime().toString(),r.getTimestamp(10).toLocalDateTime().toString()),args);
     }
-    private Map<String,Map<String,Object>> verdicts(String client){
+    Map<String,Map<String,Object>> verdicts(String client){
         Map<String,Map<String,Object>> out=new HashMap<>();
         s.db.query("SELECT job_id,rating,reason,use_state,revision,updated_by,updated_at FROM job_verdicts WHERE client_id=?",rs->{
             Map<String,Object> v=new LinkedHashMap<>();v.put("rating",rs.getString(2));v.put("reason",rs.getString(3));v.put("use",rs.getString(4));v.put("revision",rs.getInt(5));v.put("by",rs.getString(6));v.put("at",rs.getTimestamp(7).toLocalDateTime().toString());
@@ -87,7 +92,7 @@ public class ProjectFlowService {
         },client);
         return out;
     }
-    private Map<String,Object> productCard(Asset anchor,Map<String,Asset> assets){
+    Map<String,Object> productCard(Asset anchor,Map<String,Asset> assets){
         if(anchor==null||!anchor.kind().equals("PRODUCT")) return null;
         String key=MediaService.productKey(anchor);
         List<Asset> members=assets.values().stream().filter(a->a.kind().equals("PRODUCT")&&MediaService.productKey(a).equals(key)).sorted(Comparator.comparing(Asset::createdAt).thenComparing(Asset::id)).toList();
@@ -101,7 +106,7 @@ public class ProjectFlowService {
         m.put("imageIds",orderedImages(members).stream().map(Asset::id).toList());
         return m;
     }
-    private static List<Asset> orderedImages(List<Asset> members){
+    static List<Asset> orderedImages(List<Asset> members){
         String cover=members.stream().map(a->str(a.metadata().get("coverAssetId"))).filter(x->!x.isBlank()).findFirst().orElse("");
         List<Asset> images=new ArrayList<>(members.stream().filter(a->a.mime().startsWith("image/")).toList());
         images.sort(Comparator.comparing(a->!a.id().equals(cover)));
@@ -111,7 +116,7 @@ public class ProjectFlowService {
         String display=s.db.query("SELECT display_name FROM reference_profiles WHERE client_id=? AND asset_id=?",(r,n)->r.getString(1),client,ref.id()).stream().filter(Objects::nonNull).findFirst().orElse("");
         return display.isBlank()?ref.name():display;
     }
-    private Map<String,Object> item(String client,Project p,Map<String,Asset> assets,Map<String,String> folders,List<JobRow> jobs,Map<String,Map<String,Object>> verdicts,Map<String,Boolean> boards){
+    private Map<String,Object> item(String client,Project p,Map<String,Asset> assets,Map<String,String> folders,List<JobRow> jobs,Map<String,Map<String,Object>> verdicts,Map<String,Boolean> boards,Map<String,int[]> plans){
         Map<String,Object> m=new LinkedHashMap<>();
         boolean flow=flowable(p,assets);
         m.put("id",p.id());m.put("name",p.name());m.put("revision",p.revision());m.put("mode",mode(p));m.put("flow",flow);m.put("legacyPath",legacyPath(p));
@@ -121,6 +126,8 @@ public class ProjectFlowService {
         m.put("reference",ref==null||!ref.kind().equals("REFERENCE")?null:Map.of("assetId",ref.id(),"name",referenceName(client,ref)));
         m.put("ratio",ratio(p));m.put("resolution",resolution(p));m.put("duration",p.duration());m.put("status",p.status());
         m.put("storyboardConfirmed",Boolean.TRUE.equals(boards.get(p.id())));m.put("storyboardSaved",boards.containsKey(p.id()));
+        int[] plan=plans.getOrDefault(p.id(),new int[3]);
+        m.put("plan",Map.of("directions",plan[0],"selected",plan[1],"boardsConfirmed",plan[2]));
         List<JobRow> mine=jobs.stream().filter(j->j.project().equals(p.id())).toList();
         long running=mine.stream().filter(j->Set.of("QUEUED","RUNNING").contains(j.status())).count();
         long review=mine.stream().filter(j->j.output()&&!verdicts.containsKey(j.id())).count();
@@ -141,11 +148,20 @@ public class ProjectFlowService {
         s.db.query("SELECT project_id,confirmed FROM project_storyboards WHERE client_id=?",rs->{out.put(rs.getString(1),rs.getBoolean(2));},client);
         return out;
     }
-    private List<Map<String,Object>> items(String client,List<Project> list){
+    /** 框架模式 / 一键成片的方向概况：[方向数, 选中的方向数, 选中且分镜已确认的方向数] */
+    private Map<String,int[]> plans(String client){
+        Map<String,int[]> out=new HashMap<>();
+        s.db.query("SELECT d.project_id,d.selected,b.confirmed FROM project_directions d LEFT JOIN project_direction_boards b ON b.direction_id=d.id WHERE d.client_id=?",rs->{
+            int[] x=out.computeIfAbsent(rs.getString(1),k->new int[3]);x[0]++;
+            if(rs.getBoolean(2)){x[1]++;if(rs.getBoolean(3)) x[2]++;}
+        },client);
+        return out;
+    }
+    List<Map<String,Object>> items(String client,List<Project> list){
         Map<String,Asset> assets=assets(client);Map<String,String> folders=folderOf(client);List<JobRow> jobs=jobRows(client,null);
-        Map<String,Map<String,Object>> verdicts=verdicts(client);Map<String,Boolean> boards=boards(client);
+        Map<String,Map<String,Object>> verdicts=verdicts(client);Map<String,Boolean> boards=boards(client);Map<String,int[]> plans=plans(client);
         List<Map<String,Object>> out=new ArrayList<>();
-        for(Project p:list) out.add(item(client,p,assets,folders,jobs,verdicts,boards));
+        for(Project p:list) out.add(item(client,p,assets,folders,jobs,verdicts,boards,plans));
         out.sort(Comparator.comparing((Map<String,Object> m)->m.get("updatedAt").toString()).reversed());
         return out;
     }
@@ -238,11 +254,18 @@ public class ProjectFlowService {
         if(!a.kind().equals("REFERENCE")||!a.mime().startsWith("video/")) throw Store.bad("请选择参考视频");
         return a;
     }
-    private ReferenceStoryboardService.Report report(String client,String asset){
+    ReferenceStoryboardService.Report report(String client,String asset){
         return storyboards.get(client,asset).get("report") instanceof ReferenceStoryboardService.Report r?r:null;
     }
     private int boardRevision(String client,String asset){return ((Number)storyboards.get(client,asset).getOrDefault("revision",0)).intValue();}
+    /** 视频二创详情专用：别的创作方式走 DirectionFlowService */
     private Project flowProject(String client,String id){
+        Project p=anyFlowProject(client,id);
+        if(!mode(p).equals("REMAKE")) throw Store.bad("这个项目不是视频二创");
+        return p;
+    }
+    /** 任何能用新版详情打开的项目（出片词改写、审片这类各方式共用的操作） */
+    Project anyFlowProject(String client,String id){
         Project p=s.project(client,id);
         if(!flowable(p,assets(client))) throw Store.bad("这个项目还在旧页面里打开："+legacyPath(p));
         return p;
@@ -325,19 +348,7 @@ public class ProjectFlowService {
         settings.put("ratio",ratio(p));settings.put("resolution",resolution(p));settings.put("personaId",str(p.config().get("personaId")));settings.put("personaName",str(p.config().get("personaName")));
         settings.put("approach",str(p.config().get("remakeApproach")));settings.put("facts",p.facts());
         out.put("settings",settings);
-        // 商品
-        String anchor=anchorOf(p);Map<String,Object> product=new LinkedHashMap<>(productCard(assets.get(anchor),assets));
-        Map<String,Object> a=analysis.get(client,anchor);
-        Map<String,Object> pa=new LinkedHashMap<>();pa.put("status",a.get("status"));pa.put("revision",a.getOrDefault("revision",0));pa.put("stale",a.getOrDefault("stale",false));
-        if(a.get("report") instanceof Map<?,?> r){
-            pa.put("hasReport",true);pa.put("category",str(r.get("category")));pa.put("appearance",str(r.get("appearance")));
-            pa.put("risks",r.get("exaggeration_risks") instanceof List<?> l?l:List.of());
-            pa.put("hasPrice",hasPrice(s.write(r)));
-        } else {pa.put("hasReport",false);pa.put("risks",List.of());pa.put("hasPrice",false);}
-        product.put("analysis",pa);
-        Object personas=products.understanding(client,anchor).get("personas");
-        product.put("personas",personas);
-        out.put("product",product);
+        out.put("product",productInfo(client,p,assets));
         // 参考视频
         String refId=referenceId(p);Map<String,Object> ref=new LinkedHashMap<>(refs.detail(client,refId));
         ReferenceStoryboardService.Report report=report(client,refId);
@@ -360,6 +371,20 @@ public class ProjectFlowService {
         out.put("videoEnabled",video.enabled());out.put("aiEnabled",ai.enabled());
         return out;
     }
+    /** 详情里的商品：卡片 + 分析概况（广告用语检查用）+ 商品库里的人群 */
+    Map<String,Object> productInfo(String client,Project p,Map<String,Asset> assets){
+        String anchor=anchorOf(p);Map<String,Object> product=new LinkedHashMap<>(productCard(assets.get(anchor),assets));
+        Map<String,Object> a=analysis.get(client,anchor);
+        Map<String,Object> pa=new LinkedHashMap<>();pa.put("status",a.get("status"));pa.put("revision",a.getOrDefault("revision",0));pa.put("stale",a.getOrDefault("stale",false));
+        if(a.get("report") instanceof Map<?,?> r){
+            pa.put("hasReport",true);pa.put("category",str(r.get("category")));pa.put("appearance",str(r.get("appearance")));
+            pa.put("risks",r.get("exaggeration_risks") instanceof List<?> l?l:List.of());
+            pa.put("hasPrice",hasPrice(s.write(r)));
+        } else {pa.put("hasReport",false);pa.put("risks",List.of());pa.put("hasPrice",false);}
+        product.put("analysis",pa);
+        product.put("personas",products.understanding(client,anchor).get("personas"));
+        return product;
+    }
     private Map<String,Object> legacyApproach(String client,Project p,String refId){
         String draftId=str(p.config().get("remakeDraftId"));if(draftId.isBlank()) draftId=str(p.config().get("legacyRemakeDraftId"));
         Set<String> members=new HashSet<>(media.productMembers(client,anchorOf(p)).stream().map(Asset::id).toList());
@@ -369,7 +394,7 @@ public class ProjectFlowService {
         if(rows.isEmpty()) return null;
         try{RemakeDraftService.Draft d=s.json.readValue(rows.get(0),RemakeDraftService.Draft.class);return Map.of("relation",str(d.relation()),"reason",str(d.reason()),"approach",str(d.approach()));}catch(Exception e){return null;}
     }
-    private List<String> productImages(Project p){
+    static List<String> productImages(Project p){
         if(p.config().get("productAssetIds") instanceof List<?> ids) return ids.stream().map(Object::toString).toList();
         return List.of();
     }
@@ -395,7 +420,7 @@ public class ProjectFlowService {
         s.audit(client,user,"修改项目设置",name);
         return flow(client,id);
     }
-    private void writeConfig(String client,Project p,String name,Map<String,Object> config){
+    void writeConfig(String client,Project p,String name,Map<String,Object> config){
         if(s.write(config).length()>20000) throw Store.bad("项目配置过长");
         if(s.db.update("UPDATE projects SET name=?,config=?,revision=revision+1,updated_at=? WHERE client_id=? AND id=? AND revision=?",name,s.write(config),Store.now(),client,p.id(),p.revision())==0) throw conflict();
     }
@@ -558,12 +583,28 @@ public class ProjectFlowService {
             v.put("note",str(snap.config().get("changeNote")));v.put("basedOn",snap.config().get("basedOnJobId"));
             v.put("carriedReasons",snap.config().get("carriedReasons") instanceof List<?> l?l:List.of());
             v.put("segments",segmentsOf(snap,s));
+            v.put("directionId",snap.config().get("directionId"));
+            v.put("oneClick",snap.config().get("oneClickSnapshot"));
             v.put("verdict",verdicts.get(j.id()));
             out.add(v);
         }
         return out;
     }
-    private static boolean uncertain(JobRow j){return j.status().equals("BLOCKED")&&!str(j.message()).contains(NOT_CONFIGURED);}
+    /** 用户提交的出片词分段：去掉“要避开的问题”（出片时按审片记录重新加）、空段，检查长度 */
+    static List<Segment> cleanSegments(List<Segment> raw){
+        List<Segment> segments=new ArrayList<>();
+        for(Segment x:raw==null?List.<Segment>of():raw){
+            if(x==null) continue;String key=str(x.key()).trim(),title=str(x.title()).trim(),text=str(x.text()).trim();
+            if(key.equals("avoid")) continue;
+            if(key.isEmpty()||key.length()>40||title.length()>40) throw Store.bad("出片词的分段格式不对");
+            if(text.isEmpty()) continue;
+            if(text.length()>3000) throw Store.bad("「"+title+"」这一段太长了");
+            segments.add(new Segment(key,title.isEmpty()?key:title,text));
+        }
+        if(segments.isEmpty()||segments.size()>60) throw Store.bad("出片词不能为空");
+        return segments;
+    }
+    static boolean uncertain(JobRow j){return j.status().equals("BLOCKED")&&!str(j.message()).contains(NOT_CONFIGURED);}
     @Transactional
     public Map<String,Object> createVersion(String client,String user,String id,VersionInput in){
         if(!in.confirmed()) throw Store.bad("先确认出片");
@@ -576,16 +617,7 @@ public class ProjectFlowService {
         ReferenceStoryboardService.Report report=report(client,referenceId(p));
         int duration=(int)Math.ceil(report==null?p.duration():report.duration());
         if(duration<4||duration>30) throw Store.bad("视频接口一次只能出 4 到 30 秒，这条参考视频按整秒算是 "+duration+" 秒");
-        List<Segment> segments=new ArrayList<>();
-        for(Segment x:in.segments()==null?List.<Segment>of():in.segments()){
-            if(x==null) continue;String key=str(x.key()).trim(),title=str(x.title()).trim(),text=str(x.text()).trim();
-            if(key.equals("avoid")) continue;
-            if(key.isEmpty()||key.length()>40||title.length()>40) throw Store.bad("出片词的分段格式不对");
-            if(text.isEmpty()) continue;
-            if(text.length()>3000) throw Store.bad("「"+title+"」这一段太长了");
-            segments.add(new Segment(key,title.isEmpty()?key:title,text));
-        }
-        if(segments.isEmpty()||segments.size()>60) throw Store.bad("出片词不能为空");
+        List<Segment> segments=cleanSegments(in.segments());
         List<String> avoid=carried(client,id);
         if(!avoid.isEmpty()) segments.add(new Segment("avoid","要避开的问题","之前审片说差的地方，这一版要避开："+String.join("；",avoid)));
         String prompt=String.join("\n\n",segments.stream().map(Segment::text).toList());
@@ -614,7 +646,7 @@ public class ProjectFlowService {
         return versions(client,id).stream().filter(v->v.get("id").equals(job.id())).findFirst().orElseThrow();
     }
     /** 每镜台词按分镜时间写进字幕，和旧流程一样单独出 SRT。 */
-    private static List<Map<String,Object>> dialogue(List<StoryShot> shots,int duration){
+    static List<Map<String,Object>> dialogue(List<StoryShot> shots,int duration){
         List<Map<String,Object>> out=new ArrayList<>();
         double total=shots.isEmpty()?duration:shots.get(shots.size()-1).end();double scale=total>0?duration/total:1;
         for(StoryShot x:shots){
@@ -624,9 +656,9 @@ public class ProjectFlowService {
         }
         return out;
     }
-    /** 一句话让 AI 改出片词：只返回改好的段落给用户看，不直接出片。 */
+    /** 一句话让 AI 改出片词：只返回改好的段落给用户看，不直接出片。各创作方式共用。 */
     public Map<String,Object> rewrite(String client,String id,String basedOn,String instruction){
-        Project p=flowProject(client,id);
+        Project p=anyFlowProject(client,id);
         String ask=str(instruction).trim();if(ask.isEmpty()||ask.length()>300) throw Store.bad("写一句要怎么改（最多 300 字）");
         Job job=s.job(client,basedOn);if(!job.projectId().equals(id)) throw Store.bad("要改的那一版不在这个项目里");
         List<Segment> segments=segmentsOf(s.snapshot(s.db.queryForObject("SELECT snapshot FROM jobs WHERE id=?",String.class,basedOn)),s).stream().filter(x->!x.key().equals("avoid")).toList();
@@ -675,8 +707,8 @@ public class ProjectFlowService {
     // ---------- 小工具 ----------
     static String ratio(Project p){String r=str(p.config().get("videoRatio"));return RATIOS.contains(r)?r:"9:16";}
     static String resolution(Project p){String r=str(p.config().get("videoResolution"));return RESOLUTIONS.contains(r)?r:"480p";}
-    private static String pick(String raw,List<String> allowed,String message){String v=str(raw).trim();if(!allowed.contains(v)) throw Store.bad(message);return v;}
+    static String pick(String raw,List<String> allowed,String message){String v=str(raw).trim();if(!allowed.contains(v)) throw Store.bad(message);return v;}
     static String str(Object v){return Objects.toString(v,"");}
-    private static String clip(String t,int max){String v=str(t);return v.length()>max?v.substring(0,max):v;}
-    private static ResponseStatusException conflict(){return new ResponseStatusException(HttpStatus.CONFLICT,"项目刚被改过，请刷新后再操作");}
+    static String clip(String t,int max){String v=str(t);return v.length()>max?v.substring(0,max):v;}
+    static ResponseStatusException conflict(){return new ResponseStatusException(HttpStatus.CONFLICT,"项目刚被改过，请刷新后再操作");}
 }

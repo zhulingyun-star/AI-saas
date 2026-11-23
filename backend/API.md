@@ -144,12 +144,12 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 
 | 接口 | 请求与语义 |
 | --- | --- |
-| GET `/project-library` | `{folders, projects:[项目], videoEnabled, aiEnabled}`。项目：`{id,name,revision,mode,flow,legacyPath,folderId,product:{anchorId,groupId,name,sku,coverId,imageIds}|null,reference:{assetId,name}|null,ratio,resolution,duration,status,storyboardConfirmed,storyboardSaved,versions:{count,running,unreviewed,usable,latestStatus},updatedAt,createdAt}`。`mode` 为 `REMAKE`/`FRAMEWORK`/`ONE_CLICK`/`OTHER`（由 `config.creationMode`/`productionMode` 判断）；`flow=true` 表示能用新版四步详情打开（视频二创且记下了商品和参考视频，包括旧流程出片时建的作品），否则前端去 `legacyPath`（框架模式、一键成片和其他作品进 `/studio/{id}`，旧二创草稿回交付项目里的二创页） |
+| GET `/project-library` | `{folders, projects:[项目], videoEnabled, aiEnabled}`。项目：`{id,name,revision,mode,flow,legacyPath,folderId,product:{anchorId,groupId,name,sku,coverId,imageIds}|null,reference:{assetId,name}|null,ratio,resolution,duration,status,storyboardConfirmed,storyboardSaved,versions:{count,running,unreviewed,usable,latestStatus},updatedAt,createdAt}`。`mode` 为 `REMAKE`/`FRAMEWORK`/`ONE_CLICK`/`OTHER`（由 `config.creationMode`/`productionMode` 判断）；`flow=true` 表示能用新版四步详情打开（视频二创且记下了商品和参考视频，包括旧流程出片时建的作品；框架模式 / 一键成片是新版新建的，见下一节），否则前端去 `legacyPath`（旧流程的框架模式、一键成片和其他作品进 `/studio/{id}`，旧二创草稿回交付项目里的二创页） |
 | POST `/project-library/projects` | `{mode,productAnchorId,referenceAssetId?,ratio,resolution,folderId?,name?,facts,factsConfirmed}` 新建。`ratio` 只能 `9:16`/`16:9`，`resolution` 只能 `480p`/`720p`/`1080p`；`facts` 不能为空且 `factsConfirmed=true`。视频二创要选已拆解完的参考视频（否则 400），时长跟参考视频走（向上取整）。不提交任何生成任务。配置写入 `projects.config`：`flowVersion=2,productAnchorId,productName,productAssetIds,productCoverId,videoRatio,videoResolution`，二创另有 `creationMode=VIDEO_REMAKE,referenceAssetId,referenceLinks`，框架 / 一键另有 `creationMode=ECOMMERCE_VIDEO,productionMode` |
 | POST / PUT / DELETE `/project-folders[/{id}]` | 项目文件夹，规则与商品库相同（`LibraryFolders`）；`全部项目`、`未分类` 为固定名称 |
 | PUT `/projects/{id}/folder` | `{folderId}` 移动；为空表示未分类 |
 | PUT `/projects/{id}/name` | `{name,revision}` 改名（1–150 字），revision 为项目的 revision，冲突 409 |
-| GET `/projects/{id}/flow` | 视频二创详情（`flow=false` 的项目返回 400，消息里带旧页面地址）：`{project,revision,settings:{ratio,resolution,personaId,personaName,approach,facts},product:{...,analysis:{status,revision,stale,hasReport,category,appearance,risks,hasPrice},personas},reference:{参考视频详情,report,boardRevision},legacyApproach,storyboard:{saved,confirmed,revision,stale,shots},ignores,targetDuration,draftSegments,versions,videoEnabled,aiEnabled}` |
+| GET `/projects/{id}/flow` | 视频二创详情（框架模式 / 一键成片的返回见下一节；`flow=false` 的项目返回 400，消息里带旧页面地址）：`{project,revision,settings:{ratio,resolution,personaId,personaName,approach,facts},product:{...,analysis:{status,revision,stale,hasReport,category,appearance,risks,hasPrice},personas},reference:{参考视频详情,report,boardRevision},legacyApproach,storyboard:{saved,confirmed,revision,stale,shots},ignores,targetDuration,draftSegments,versions,videoEnabled,aiEnabled}` |
 | PUT `/projects/{id}/settings` | `{revision,name?,ratio?,resolution?,personaId?,personaName?,approach?}`，没传的字段不变，`personaName=""` 清除人群。画幅分辨率只影响之后出的版本 |
 | PUT `/projects/{id}/product` | `{anchorId,revision}` 换商品：分镜回到未确认，人群清空 |
 | PUT `/projects/{id}/reference` | `{assetId,revision}` 换参考视频（必须已拆解）：分镜和忽略记录清空，按新视频重来 |
@@ -165,3 +165,26 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 - 版本 = `jobs` 一行，`no` 为任务的 revision（同一项目递增）。每版的出片词、分段、画幅分辨率、改动说明从任务快照（`jobs.snapshot` 的 `config`）读，旧流程出的版本按空行把整段出片词切成段。
 - 出片请求现在把项目的画幅（`config.videoRatio`）作为 `ratio` 传给视频接口（原来固定 9:16），分辨率仍是 `config.videoResolution`。`VIDEO_API_SIZE` 只在作品没选分辨率时决定默认值。
 - 新表：`project_folders`、`project_profiles`（项目所在文件夹）、`project_storyboards`（分镜：每镜原视频快照 + 改成的机位 / 画面 / 台词 / 任务，`confirmed`、`revision`、拆解来源 revision）、`project_ad_ignores`（忽略记录）、`job_verdicts`（每版审片：评价、原因、可投放 / 不用了、revision）。画幅、分辨率、给谁看、改编思路继续放在 `projects.config`，不新增列。
+
+## 项目（新版）：框架模式 / 一键成片四步详情（V11）
+
+新版新建的框架模式、一键成片项目（`config.flowVersion=2`）在项目列表里 `flow=true`，进 `/p/{id}` 四步详情：商品 → 方向 → 分镜 → 出片。旧流程里建的这两种作品仍是 `flow=false`，进 `legacyPath`（`/studio/{id}`）；旧的 `/projects/{id}/frameworks`、`/projects/one-click` 等接口不变。列表项目多了 `plan:{directions,selected,boardsConfirmed}`（方向数、选中的方向数、选中且分镜已确认的方向数）。
+
+下面的 `/projects/{id}/flow`、`/settings`、`/product`、`/versions` 与视频二创同一个地址，后端按项目的创作方式分到 `DirectionFlowService`。
+
+| 接口 | 请求与语义 |
+| --- | --- |
+| GET `/projects/{id}/flow` | `{project,revision,mode:FRAMEWORK|ONE_CLICK,settings:{ratio,resolution,personaId,personaName,duration,facts,oneClick?},product:{同视频二创},directions:[方向],ignores,versions,videoEnabled,aiEnabled,options:{hooks,contentTypes,tempos,people,voices,looks,endings,durations:[15,30],tasks}}`。方向：`{id,source:AI|LOCAL,data,origin,edited,selected,selectOrder,revision,productChanged,versionCount,board:{saved,confirmed,revision,source,duration,stale,shots,draftSegments}}`；`data`/`origin` = `{title,why,hook,openVisual,openLine,structure,points[],scene,contentType,tempo,people,voice,look,ending,personaName,duration}`，`origin` 是写出来时的原文（恢复用）。`shots` 与视频二创同形（`origVisual/origLines` 是写出来时的原文，`camera` 为空）。`board.stale=true` 表示方向在分镜写好之后改过。版本多了 `directionId`、`oneClick`（一键成片出这一版时的设置快照）和 `jobNo`（项目里的总序号）；框架模式的 `no` 是这个方向里的序号 |
+| PUT `/projects/{id}/settings` | 同视频二创，另收 `duration`（15/30，框架模式下次出方向的默认时长）和 `oneClick:{personaName,duration,src:idea|copy,copy,creative,people,voice,tempo,look}`（只限一键成片；空字符串 = 交给 AI；`copy`、`creative` 各最多 500 字） |
+| PUT `/projects/{id}/product` | `{anchorId,revision}` 换商品：所有分镜回到未确认，人群清空；方向保留，`productChanged=true`；一键成片下次出片会重新写方向和分镜 |
+| POST `/projects/{id}/directions/generate` | 框架模式。`{revision,personaName,duration}` 出 3 套方向（`revision` 是项目的）。没选中、也没出过片的旧方向被替换，选中的和出过片的保留；每个项目最多 12 套 |
+| POST `/projects/{id}/directions/{dir}/regenerate` | `{revision}`（方向的）单独重出一套：内容和原文一起换掉，已有分镜变成 `stale` |
+| PUT `/projects/{id}/directions/{dir}` | `{revision,direction:{同 data}}` 改格子；开头类型 8 选 1，内容类型 / 节奏 / 人物 / 声音 / 片种 / 收尾只能取 `options` 里的值，时长 15/30，卖点最多 3 条。恢复原文 = 把 `origin` 发回来 |
+| POST `/projects/{id}/directions/confirm` | 框架模式。`{revision,ids:[1~3 个方向 id]}` 选定方向（顺序即 A/B/C），还没有分镜的方向这时写分镜（15 秒 5 镜、30 秒 7 镜，每镜时间和任务固定，只写画面和台词） |
+| PUT `/projects/{id}/directions/{dir}/storyboard` | `{revision,shots:[{id,visual,lines,task}],confirmed}` 改分镜。镜头 id 和顺序不能变；每镜最多 4 句、每句 120 字；`confirmed=true` 时每镜都要有画面。一键成片保存时总是算确认 |
+| POST `/projects/{id}/directions/{dir}/storyboard/rewrite` | `{revision}`（分镜的）按方向现在的格子和时长重写分镜 |
+| POST `/projects/{id}/one-click/run` | 一键成片。`{revision,settings:{同 oneClick},note?}`：保存设置；设置（含商品）和上次出片时一样就沿用现在的方向和分镜（用户可能改过），否则重新写 1 个方向和它的分镜（自动算确认，旧方向保留但不再选中）；然后按分镜拼出片词出一版，返回这一版。有排队 / 生成中或结果不确定的版本时 409 |
+| POST `/projects/{id}/versions` | 同视频二创，另带 `directionId`（必填）。框架模式：方向要选中、分镜要确认；同一个方向里有在出片的才 409，不同方向可以同时出片（因此不走 `ProjectService.submit` 的“一个项目只能一条在做”，其余检查一样）。审片说“差”的原因只带进同一个方向的下一版。一键成片：快照里记下当前设置 |
+
+- 文字模型：配置了就走 `AiService.directions` / `directionBoard`（只能从给定选项里选，没价格资料时价格型开头会被换掉）；`AI_MODE=local` 不调外部模型，按商品库「商品理解」的卖点、痛点、场景和人群拼本地模板，`source=LOCAL`，`why` 里写明“本地模板……没有经过文字模型”，界面标“本地模板 · 不是 AI 写的”，缺的地方留空不编。
+- 新表：`project_directions`（方向：当前内容、原文、写的时候的商品、是否选中及顺序、revision）、`project_direction_boards`（每个方向一份分镜：镜头 JSON、写自哪个方向 revision、时长、是否确认、revision）。设置放在 `projects.config`（`planDuration`、`personaName`、`oneClick`、`oneClickPlanKey`）；每一版仍是 `jobs` 一行，`snapshot.config` 里多了 `directionId`、`directionTitle`、`oneClickSnapshot`。

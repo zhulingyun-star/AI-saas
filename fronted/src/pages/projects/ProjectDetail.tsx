@@ -11,15 +11,18 @@ import { coverAt, HOOK_TYPES, thumbUrl } from '../references/data';
 import ProductPicker from './ProductPicker';
 import { ProductButton, RatioPicker, ReferenceRow, TopBar, type Step } from './parts';
 import StepStoryboard from './StepStoryboard';
-import StepOutput from './StepOutput';
+import StepOutput, { type Lane } from './StepOutput';
+import ModeDetail from './ModeDetail';
 import {
   formatRR,
+  isModeFlow,
   MODE_LABEL,
   shortTime,
   useProjectLibrary,
   useRefreshProjects,
   versionRunning,
   type Flow,
+  type ModeFlow,
 } from './data';
 
 function defaultStep(f: Flow): Step {
@@ -28,7 +31,7 @@ function defaultStep(f: Flow): Step {
   return 2;
 }
 
-/** 视频二创项目详情：商品 → 方向 → 分镜 → 出片。 */
+/** 项目详情：商品 → 方向 → 分镜 → 出片。这里是视频二创；框架模式 / 一键成片交给 ModeDetail。 */
 export default function ProjectDetail() {
   const { id = '' } = useParams();
   const { client, notify } = useWorkspace();
@@ -40,10 +43,11 @@ export default function ProjectDetail() {
   const key = [client.id, 'project-flow', id];
   const q = useQuery({
     queryKey: key,
-    queryFn: () => request<Flow>(`/clients/${client.id}/projects/${id}/flow`),
+    queryFn: () => request<Flow | ModeFlow>(`/clients/${client.id}/projects/${id}/flow`),
     refetchInterval: (query) => (query.state.data?.versions?.some(versionRunning) ? 3000 : false),
   });
-  const f = q.data;
+  const raw = q.data;
+  const f = raw && !isModeFlow(raw) ? raw : undefined;
   const stepParam = Number(params.get('step'));
   const step: Step | null = [1, 2, 3, 4].includes(stepParam)
     ? (stepParam as Step)
@@ -56,7 +60,7 @@ export default function ProjectDetail() {
     setParams(next, { replace: false });
     window.scrollTo?.({ top: 0 });
   };
-  const apply = (next: Flow) => {
+  const apply = (next: Flow | ModeFlow) => {
     cache.setQueryData(key, next);
     void cache.invalidateQueries({ queryKey: [client.id, 'project-library'] });
   };
@@ -71,6 +75,9 @@ export default function ProjectDetail() {
   const [err, setErr] = useState('');
   const [approach, setApproach] = useState<string | null>(null);
   useEffect(() => setApproach(null), [id]);
+
+  if (raw && isModeFlow(raw))
+    return <ModeDetail flow={raw} apply={apply} reload={q.refetch} folders={folders} />;
 
   if (q.isPending)
     return (
@@ -98,7 +105,7 @@ export default function ProjectDetail() {
                 </Btn>
               }
             >
-              框架模式、一键成片和以前的作品暂时在原来的制作页里继续。
+              旧流程里建的框架模式、一键成片和以前的作品在原来的制作页里继续。
             </Notice>
           ) : (
             <Notice tone="error" title="项目没打开">
@@ -521,7 +528,7 @@ export default function ProjectDetail() {
           ) : step === 3 ? (
             <StepStoryboard flow={f} apply={apply} reload={q.refetch} go={go} />
           ) : (
-            <StepOutput flow={f} apply={apply} reload={q.refetch} go={go} />
+            <StepOutput flow={f} lane={remakeLane(f, go)} reload={q.refetch} go={go} />
           )}
         </div>
         {sideRail}
@@ -598,4 +605,24 @@ export default function ProjectDetail() {
       )}
     </div>
   );
+}
+
+/** 视频二创整个项目只有一条出片线 */
+function remakeLane(f: Flow, go: (s: Step) => void): Lane {
+  return {
+    versions: f.versions,
+    draftSegments: f.draftSegments,
+    ready: f.storyboard.confirmed,
+    duration: f.targetDuration,
+    hook: f.reference.hook ?? '',
+    personaName: f.settings.personaName,
+    notReady: {
+      msg: '分镜还没确认，确认以后才能出片。',
+      actions: (
+        <Btn variant="primary" onClick={() => go(3)}>
+          去确认分镜
+        </Btn>
+      ),
+    },
+  };
 }

@@ -373,6 +373,8 @@ async function mockProjects(page: Page, opts: { versions?: Any[]; confirmed?: bo
         name: b.name,
         mode: b.mode,
         folderId: b.folderId,
+        // 新版建的三种项目都进四步详情
+        flow: true,
       });
       state.projects.unshift(it);
       return json(it);
@@ -521,7 +523,7 @@ const doneVersion = (no: number, extra: Any = {}) => ({
   ...extra,
 });
 
-test('项目列表：文件夹、搜索、改名、移动，框架模式进旧制作页', async ({ page }) => {
+test('项目列表：文件夹、搜索、改名、移动，旧流程的框架模式作品进旧制作页', async ({ page }) => {
   const state = await mockProjects(page);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '全部项目' })).toBeVisible();
@@ -603,7 +605,9 @@ test('新建项目：视频二创（商品弹窗、参考视频弹窗、画幅�
   });
 });
 
-test('新建项目：框架模式、一键成片进旧制作页；剧情模式不能选；弹窗里新建商品', async ({ page }) => {
+test('新建项目：框架模式、一键成片也进新版详情；剧情模式不能选；弹窗里新建商品', async ({
+  page,
+}) => {
   const state = await mockProjects(page);
   await page.goto('/p/new');
   await expect(page.getByRole('radio', { name: /剧情模式/ })).toBeDisabled();
@@ -625,12 +629,13 @@ test('新建项目：框架模式、一键成片进旧制作页；剧情模式�
   await pd.getByRole('radio', { name: '新百伦 992 灰白复古鞋' }).click();
   await pd.getByRole('button', { name: '选这个商品' }).click();
   await page.getByLabel('已核对商品事实').check();
-  await page.getByRole('button', { name: '创建项目，去选框架' }).click();
-  await expect(page).toHaveURL(/\/studio\/new1\?framework=1$/);
+  await page.getByRole('button', { name: '创建项目，去出方向' }).click();
+  await expect(page).toHaveURL(/\/p\/new1$/);
   await page.goto('/p/new?mode=oneclick');
   await page.getByLabel('已核对商品事实').check();
-  await page.getByRole('button', { name: '创建项目，去制作页' }).click();
-  await expect(page).toHaveURL(/\/studio\/new2$/);
+  await expect(page.getByText('这一步不会生成视频。')).toBeVisible();
+  await page.getByRole('button', { name: '创建项目，去填设置' }).click();
+  await expect(page).toHaveURL(/\/p\/new2$/);
   expect(state.created.map((x: Any) => x.mode)).toEqual(['FRAMEWORK', 'ONE_CLICK']);
 });
 

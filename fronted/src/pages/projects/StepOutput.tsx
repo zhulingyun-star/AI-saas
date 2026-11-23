@@ -5,7 +5,7 @@ import { useWorkspace } from '../../components/UI';
 import { Btn, Card, Notice } from '../../gy/ui';
 import { adCheck, type AdContext } from '../../adcheck';
 import { AdText } from './StepStoryboard';
-import { TopBar, type StepProps } from './parts';
+import { TopBar, type Step } from './parts';
 import {
   changedSegments,
   elapsed,
@@ -16,7 +16,7 @@ import {
   STAGES,
   versionRunning,
   versionState,
-  type Flow,
+  type BaseFlow,
   type Segment,
   type Verdict,
   type Version,
@@ -40,16 +40,20 @@ const HOOK_ORDER = [
   '反常识型',
   '身份代入型',
 ];
-export function relayText(flow: Flow, kind: RelayKind) {
-  const persona = flow.product.personas.find((p) => p.name === flow.settings.personaName);
+export function relayText(
+  flow: BaseFlow,
+  lane: Pick<Lane, 'hook' | 'personaName'>,
+  kind: RelayKind,
+) {
+  const persona = flow.product.personas.find((p) => p.name === lane.personaName);
   if (kind === 'hook') {
-    const now = flow.reference.hook;
+    const now = lane.hook;
     const alt = [...(persona?.hooks ?? []), ...HOOK_ORDER].find((h) => h && h !== now) ?? '对比型';
     return `开头从「${now || '现在的开头'}」换成「${alt}」：重写前 3 秒的画面和第一句台词，后面的镜头和卖点不动`;
   }
   if (kind === 'scene') return '换一个拍摄场景：人物、商品和台词都不变，只换拍摄地方和光线';
   if (kind === 'persona') {
-    const alt = flow.product.personas.find((p) => p.name !== flow.settings.personaName);
+    const alt = flow.product.personas.find((p) => p.name !== lane.personaName);
     return alt
       ? `换给「${alt.name}」看：开头和台词按他们的说法改${alt.worry ? `（他们在意：${alt.worry}）` : ''}，商品卖点不变`
       : '换给另一群人看：开头和台词按他们的说法改，商品卖点不变';
@@ -57,7 +61,44 @@ export function relayText(flow: Flow, kind: RelayKind) {
   return '换一种讲价格的方式：只用商品资料里写的价格和活动，别的不动';
 }
 
-type Pending = { segments: Segment[]; note: string; basedOn: string | null; msg: string };
+export type Pending = {
+  segments: Segment[];
+  note: string;
+  basedOn: string | null;
+  msg: string;
+  /** 一键成片的“开始出片”走自己的接口 */
+  run?: () => Promise<Version>;
+};
+/** 一条出片线：视频二创整个项目一条；框架模式每个方向一条；一键成片整个项目一条 */
+export interface Lane {
+  directionId?: string;
+  versions: Version[];
+  /** 按已确认的分镜拼好的第 1 版出片词 */
+  draftSegments: Segment[];
+  /** 分镜确认了，能出片 */
+  ready: boolean;
+  duration: number;
+  /** 接力“换开头 / 换人群”用 */
+  hook: string;
+  personaName: string;
+  /** 还不能出片时的顶部操作条 */
+  notReady: { msg: ReactNode; actions: ReactNode };
+  /** 不在出片、不在确认时的顶部操作条；不给就用默认的“出第一版 / 改最新一版再出” */
+  idle?: (
+    open: (p: Pending) => void,
+    latest?: Version,
+  ) => { msg: ReactNode; actions: ReactNode } | null;
+  /** 顶部操作条下面、版本列表上面的内容（一键成片的设置） */
+  before?: ReactNode;
+  /** 版本卡标题下面的补充（一键成片的设置标签） */
+  extra?: (v: Version, prev?: Version) => ReactNode;
+}
+export interface OutputProps {
+  flow: BaseFlow;
+  lane: Lane;
+  reload: () => Promise<unknown>;
+  go: (s: Step) => void;
+}
 type Editing = {
   id: string;
   ask: string;
@@ -67,10 +108,11 @@ type Editing = {
   error?: string;
 };
 
-/** 第 4 步 出片：每版一张卡（新的在上），单独审片，改这一版再出，两版并排对比，基于某一版再做一条。 */
-export default function StepOutput({ flow, reload, go }: StepProps) {
+/** 第 4 步 出片：每版一张卡（新的在上），单独审片，改这一版再出，两版并排对比，基于某一版再做一条。
+ *  视频二创、框架模式（每个方向一条线）、一键成片共用。 */
+export default function StepOutput({ flow, lane, reload }: OutputProps) {
   const { client, notify } = useWorkspace();
-  const versions = flow.versions;
+  const versions = lane.versions;
   const [pending, setPending] = useState<Pending | null>(null);
   const [edit, setEdit] = useState<Editing | null>(null);
   const [cmp, setCmp] = useState<string[]>([]);
@@ -108,12 +150,15 @@ export default function StepOutput({ flow, reload, go }: StepProps) {
   const submit = () =>
     pending &&
     void runIt(async () => {
-      const v = await post<Version>(`/clients/${client.id}/projects/${flow.project.id}/versions`, {
-        segments: pending.segments,
-        note: pending.note,
-        basedOn: pending.basedOn,
-        confirmed: true,
-      });
+      const v = pending.run
+        ? await pending.run()
+        : await post<Version>(`/clients/${client.id}/projects/${flow.project.id}/versions`, {
+            segments: pending.segments,
+            note: pending.note,
+            basedOn: pending.basedOn,
+            confirmed: true,
+            directionId: lane.directionId,
+          });
       setPending(null);
       setEdit(null);
       setCmp([]);
@@ -128,7 +173,7 @@ export default function StepOutput({ flow, reload, go }: StepProps) {
     setPending(null);
     setEdit({
       id: v.id,
-      ask: relay ? relayText(flow, relay) : '',
+      ask: relay ? relayText(flow, lane, relay) : '',
       segments: v.segments.filter((s) => s.key !== 'avoid').map((s) => ({ ...s })),
       relay: relay
         ? `接力 · ${RELAY.find(([k]) => k === relay)![1]} · 基于「第 ${v.no} 版」`
@@ -189,19 +234,8 @@ export default function StepOutput({ flow, reload, go }: StepProps) {
 
   // 置顶操作条
   let bar: ReactNode;
-  if (!flow.storyboard.confirmed && !versions.length)
-    bar = (
-      <TopBar
-        actions={
-          <Btn variant="primary" onClick={() => go(3)}>
-            去确认分镜
-          </Btn>
-        }
-      >
-        分镜还没确认，确认以后才能出片。
-      </TopBar>
-    );
-  else if (pending)
+  const idle = !pending && !running && lane.idle ? lane.idle(setPending, latestDone) : null;
+  if (pending)
     bar = (
       <TopBar
         actions={
@@ -232,6 +266,9 @@ export default function StepOutput({ flow, reload, go }: StepProps) {
         <span className="num">{elapsed(running.createdAt, now)}</span>，可以先离开页面
       </TopBar>
     );
+  else if (idle) bar = <TopBar actions={idle.actions}>{idle.msg}</TopBar>;
+  else if (!lane.ready && !versions.length)
+    bar = <TopBar actions={lane.notReady.actions}>{lane.notReady.msg}</TopBar>;
   else if (!versions.length)
     bar = (
       <TopBar
@@ -240,10 +277,10 @@ export default function StepOutput({ flow, reload, go }: StepProps) {
             variant="primary"
             onClick={() =>
               setPending({
-                segments: flow.draftSegments,
+                segments: lane.draftSegments,
                 note: '',
                 basedOn: null,
-                msg: `按已确认的分镜出第 1 版（${rr} · ${flow.targetDuration} 秒）`,
+                msg: `按已确认的分镜出第 1 版（${rr} · ${lane.duration} 秒）`,
               })
             }
           >
@@ -283,12 +320,13 @@ export default function StepOutput({ flow, reload, go }: StepProps) {
           现在出片只会把这一版的出片词和设置记下来，不会真的发出生成请求；配置好视频接口以后再出。
         </Notice>
       )}
-      {flow.storyboard.confirmed && !versions.length && (
+      {lane.before}
+      {lane.ready && !versions.length && !lane.idle && (
         <Card className="gy-pjs">
           <h3>
-            第 1 版的出片词<small>按已确认的分镜拼出来的，{flow.draftSegments.length} 段</small>
+            第 1 版的出片词<small>按已确认的分镜拼出来的，{lane.draftSegments.length} 段</small>
           </h3>
-          <SegmentList segments={flow.draftSegments} ctx={ctx} />
+          <SegmentList segments={lane.draftSegments} ctx={ctx} />
         </Card>
       )}
       {pair.length === 2 && (
@@ -388,6 +426,7 @@ export default function StepOutput({ flow, reload, go }: StepProps) {
                   {state}
                 </span>
               </div>
+              {lane.extra?.(v, prev)}
               <div className="gy-vdiff">
                 {!prev
                   ? v.note || '首版：按已确认的分镜出片'

@@ -17,7 +17,7 @@ import {
   type ProjectItem,
 } from './data';
 
-/** 项目列表：按文件夹看、搜索、改名、移动。点项目进详情（框架模式和一键成片暂时进旧的制作页）。 */
+/** 项目列表：按文件夹看、搜索、改名、移动。点项目进详情（新版建的都进四步详情，旧流程的作品进旧制作页）。 */
 export default function ProjectList() {
   const { client, notify } = useWorkspace();
   const navigate = useNavigate();
