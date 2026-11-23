@@ -188,3 +188,23 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 
 - 文字模型：配置了就走 `AiService.directions` / `directionBoard`（只能从给定选项里选，没价格资料时价格型开头会被换掉）；`AI_MODE=local` 不调外部模型，按商品库「商品理解」的卖点、痛点、场景和人群拼本地模板，`source=LOCAL`，`why` 里写明“本地模板……没有经过文字模型”，界面标“本地模板 · 不是 AI 写的”，缺的地方留空不编。
 - 新表：`project_directions`（方向：当前内容、原文、写的时候的商品、是否选中及顺序、revision）、`project_direction_boards`（每个方向一份分镜：镜头 JSON、写自哪个方向 revision、时长、是否确认、revision）。设置放在 `projects.config`（`planDuration`、`personaName`、`oneClick`、`oneClickPlanKey`）；每一版仍是 `jobs` 一行，`snapshot.config` 里多了 `directionId`、`directionTitle`、`oneClickSnapshot`。
+
+## 资产库与投放数据（V12）
+
+资产库 = 所有项目出好的成片（`jobs` 里有成片文件的那些版本，每一版一条）。投放数据只来自用户手填或导入的表格，没有就是没有；累计、「哪种赢了」「该换新了」都只按这些真实记录算，接口不返回任何估算或示例数字。旧的 `metrics` 表和 `/metrics` 导入（素材 ID + 消耗）不动，旧「投放数据」页仍可用。以下仍以 `/api/clients/{clientId}` 为前缀，均校验客户所有者，写操作需要 CSRF。
+
+| 接口 | 请求与语义 |
+| --- | --- |
+| GET `/video-library` | `{videos:[成片],pendingVersions,hooks}`。只列出好的版本，新的在前；`pendingVersions` 是还没出好或没出成功的版本数。成片：`{id(任务 id),code,projectId,projectName,mode,projectFlow,projectPath,no,jobNo,status,message,hasOutput,createdAt,updatedAt,ratio,resolution,duration,note,product:{anchorId,name,coverId},reference:{assetId,name}?,direction:{id,title,letter}?,hook,personaName,scene,contentType,verdict?,hasPrice,adName,perf?,tired:[命中的信号名]}`。`no` 与项目详情一致（框架模式按方向数，一键成片按项目数，其他是任务 revision）；`letter` 是框架模式选中方向的 A/B/C。开头类型、人群、场景来自方向（框架 / 一键）或参考视频的开头标注和项目人群（二创），没有就是空。`code` = 任务 id 去横线前 8 位；`adName`（投放用名）= `商品_开头类型_人群_场景_时长秒_v版本_code`。值为 null 的字段不出现在 JSON 里 |
+| GET `/video-library/{jobId}` | 成片详情：上面的字段 + `{segments,carriedReasons,records:[记录，日期新的在前],signals:[{key,title,hit,detail}]|null,madeOn}`。`signals=null` 表示有曝光的记录少于 3 条，还判断不了；`madeOn` 是生成那天（北京时间） |
+| POST `/jobs/{jobId}/performance` | 手填一条：`{dateFrom,dateTo?,impressions,clicks,retain3s?,finishRate?,productClicks?,orders?,gpm?,roi?,negativeRate?,note?}`，返回新的详情。必填开始日期、曝光、点击；结束日期默认同开始日期；日期不能早于成片生成那天、不能晚于今天、一条最多 366 天；点击 ≤ 曝光；3 秒留存 / 完播率 / 负反馈率是 0–100 的百分数；投产比 0–10000；备注最多 300 字。同一条成片的记录日期不能重叠（400）。没出好的版本 400 |
+| PUT `/jobs/{jobId}/performance/{id}` | 同上 + `revision`，冲突 409 |
+| DELETE `/jobs/{jobId}/performance/{id}?revision=N` | 删一条，冲突 409，返回新的详情 |
+| POST `/performance-imports/preview` | `{fileName,text,mapping?,assign?}` 预览 CSV（不写库）。`text` 是表格全文（前端按 UTF-8 读，读不通按 GBK），逗号 / 制表符 / 分号分隔，支持引号和 BOM；最多约 2MB、5000 行、80 列。`mapping` 是 `{字段:列号}`，不传就按表头猜（如「素材名称」「展示数」「点击数」「3秒播放率」「成交订单数」「消耗回报率」）；字段：`adName,code,date,dateFrom,dateTo,impressions,clicks,retain3s,finishRate,productClicks,orders,gpm,roi,negativeRate,note`。`assign` 是 `{行号:任务 id 或 "skip"}`（行号按表格行，第 1 行是表头）。返回 `{fileName,columns:[{index,name,field}],mapping,fields,missing,sample,totalRows,rows:[{row,name,code,dateFrom,dateTo,values,status:OK|ERROR|UNMATCHED|SKIPPED,by:NAME|CODE|NAME_CODE|MANUAL,jobId,video,messages}],counts:{ok,error,unmatched,skipped},videos}`。缺了必需的列（投放用名或视频编号、日期、曝光、点击）时 `missing` 不为空、不逐行检查。对成片顺序：投放用名完全一致 → 视频编号（任务 id 或至少 6 位前缀，多条命中要手动指认）→ 名字最后一段是视频编号 → 手动指认。逐行检查同手填，另外和已有记录、和表里前面的行（同一条成片）日期重叠都算错误行。点击率、转化率列不读，按曝光、点击、成交单数重新算 |
+| POST `/performance-imports` | 同上 + `confirmed:true`。在事务里重新检查一遍；还有 `UNMATCHED` 行（没指认也没跳过）400；没有能导入的行 400；`ERROR` 行不导入，在返回里逐行说明：`{importId,imported,skipped,videos,errors:[{row,name,messages}]}` |
+| GET `/performance-imports` | 最近 20 次导入：`{id,fileName,totalRows,imported,skipped,errors,by,at}` |
+
+- 累计：曝光、点击、商品点击、成交单数直接加；点击率 = 点击 ÷ 曝光；转化率 = 成交单数 ÷ 点击（只算填了成交单数的记录）；3 秒留存、完播率、千次曝光成交额、投产比、负反馈率按曝光加权。
+- 该换新了（只看曝光大于 0 的记录，按日期排，至少 3 条才判断，每条记录算一个点）：最近 7 条里有 6 条以上时，后 3 条平均点击率比前 3 条低 30% 以上；最近 3 条的平均负反馈率超过 0.8%；最近 3 条的 3 秒留存平均低于 25%（没有「有效播放」这一项，用 3 秒留存代替）。
+- 「哪种赢了」在前端按列表里每条成片的累计分组：每条先算自己的累计，再在组里取平均（每条分量一样），少于 3 条的分组标“样本太少”。不做出价、预算、预测或打分。
+- 新表：`job_performance`（一条投放记录：成片、起止日期、各项数字、备注、来源 MANUAL/IMPORT、导入批次、revision、谁改的）、`performance_imports`（每次导入：文件名、行数、导入 / 跳过 / 有问题的行数、谁导的）。

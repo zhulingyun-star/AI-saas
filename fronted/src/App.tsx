@@ -26,6 +26,10 @@ import ReferenceDetail from './pages/references/ReferenceDetail';
 import ProjectList from './pages/projects/ProjectList';
 import ProjectNew from './pages/projects/ProjectNew';
 import ProjectDetail from './pages/projects/ProjectDetail';
+import VideoList from './pages/library/VideoList';
+import VideoDetail from './pages/library/VideoDetail';
+import ImportPage from './pages/library/ImportPage';
+import { TiredView, WinView } from './pages/library/Insights';
 export default function App() {
   const cache = useQueryClient();
   const navigate = useNavigate();
@@ -155,6 +159,12 @@ export default function App() {
           <Route path="/products/new" element={<ProductNew />} />
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/products/:id/review" element={<ProductReview />} />
+          {/* 资产库：项目出好的成片、投放数据、哪种赢了、该换新了 */}
+          <Route path="/library" element={<VideoList />} />
+          <Route path="/library/import" element={<ImportPage />} />
+          <Route path="/library/win" element={<WinView />} />
+          <Route path="/library/tired" element={<TiredView />} />
+          <Route path="/library/:id" element={<VideoDetail />} />
           <Route path="/assets" element={<Legacy page={<Assets key="assets" />} />} />
           <Route path="/models" element={<Legacy page={<Assets key="models" kind="MODEL" />} />} />
           <Route

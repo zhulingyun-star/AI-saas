@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { jobUrl, post, put } from '../../api';
 import { useWorkspace } from '../../components/UI';
 import { Btn, Card, Notice } from '../../gy/ui';
@@ -23,14 +23,14 @@ import {
 } from './data';
 
 /** 接力的四个入口：换开头 / 换场景 / 换人群 / 换价格说法 */
-const RELAY = [
+export const RELAY = [
   ['hook', '换开头'],
   ['scene', '换场景'],
   ['persona', '换人群'],
   ['price', '换价格说法'],
 ] as const;
-type RelayKind = (typeof RELAY)[number][0];
-const PRICE_NO = '商品资料里还没有价格，先去商品库补上真实价格和活动，AI 不会自己编';
+export type RelayKind = (typeof RELAY)[number][0];
+export const PRICE_NO = '商品资料里还没有价格，先去商品库补上真实价格和活动，AI 不会自己编';
 const HOOK_ORDER = [
   '痛点型',
   '对比型',
@@ -180,6 +180,33 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
         : undefined,
     });
   };
+  // 从资产库「基于这条再做一条」跳过来：?relay=hook&from=<这一版> → 直接打开这一版的“说一句话让 AI 改”，带上改法
+  const [params, setParams] = useSearchParams();
+  const relayParam = params.get('relay');
+  const relayFrom = params.get('from');
+  useEffect(() => {
+    if (!relayParam || !relayFrom) return;
+    const v = versions.find((x) => x.id === relayFrom);
+    if (!v) return;
+    const kind = RELAY.find(([k]) => k === relayParam);
+    const next = new URLSearchParams(params);
+    next.delete('relay');
+    next.delete('from');
+    setParams(next, { replace: true });
+    if (!kind || !v.hasOutput) return;
+    if (kind[0] === 'price' && !flow.product.analysis.hasPrice) {
+      notify(PRICE_NO);
+      return;
+    }
+    openEdit(v, kind[0]);
+    notify(`已带上「${kind[1]}」的改法，看一眼再点「按这句改」`);
+    window.setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>('[aria-label="一句话说要怎么改"]');
+      el?.scrollIntoView?.({ block: 'center' });
+      el?.focus({ preventScroll: true });
+    }, 80);
+    // 只在带着接力参数进来时跑一次（参数用完就去掉）
+  }, [relayParam, relayFrom, versions.length]);
   const rewrite = (v: Version) =>
     edit &&
     void runIt(async () => {
@@ -565,8 +592,8 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
                         取消这一版
                       </Btn>
                     )}
-                    <Link className="gy-link" to={`/queue?job=${v.id}`}>
-                      在生成任务里看
+                    <Link className="gy-link" to={`/library/${v.id}`}>
+                      在资产库打开
                     </Link>
                   </span>
                   {v.hasOutput && (
@@ -626,13 +653,13 @@ function SegmentList({
   );
 }
 
-/** 单独审片：好 / 差（必填原因，下一版会带上）/ 可投放 / 不用了 */
-function Review({
+/** 单独审片：好 / 差（必填原因，下一版会带上）/ 可投放 / 不用了。资产库详情也用它。 */
+export function Review({
   v,
   busy,
   onSave,
 }: {
-  v: Version;
+  v: Pick<Version, 'no' | 'verdict'>;
   busy: boolean;
   onSave: (p: Partial<Verdict>) => void;
 }) {

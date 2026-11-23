@@ -312,7 +312,7 @@ test('new frame keeps old routes and opens 项目 by default', async ({ page }) 
   await expect(page.getByLabel('切换客户')).toHaveValue('c');
   for (const [section, path] of [
     ['参考视频', '/references'],
-    ['资产库', '/gallery'],
+    ['资产库', '/library'],
     ['团队管理', '/team'],
     ['商品库', '/products'],
   ]) {
@@ -323,7 +323,9 @@ test('new frame keeps old routes and opens 项目 by default', async ({ page }) 
   await page.goto('/models');
   await expect(top.getByRole('link', { name: '资产库' })).toHaveAttribute('aria-current', 'page');
   await expect(
-    page.getByRole('navigation', { name: '资产库子页面' }).getByRole('link', { name: '模特' }),
+    page
+      .getByRole('navigation', { name: '资产库', exact: true })
+      .getByRole('link', { name: '模特' }),
   ).toHaveAttribute('aria-current', 'page');
   await page.getByRole('button', { name: '收起左栏' }).click();
   await expect(page.locator('.gy-app')).toHaveClass(/gy-collapsed/);

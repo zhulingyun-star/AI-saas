@@ -112,7 +112,7 @@ public class ProjectFlowService {
         images.sort(Comparator.comparing(a->!a.id().equals(cover)));
         return images;
     }
-    private String referenceName(String client,Asset ref){
+    String referenceName(String client,Asset ref){
         String display=s.db.query("SELECT display_name FROM reference_profiles WHERE client_id=? AND asset_id=?",(r,n)->r.getString(1),client,ref.id()).stream().filter(Objects::nonNull).findFirst().orElse("");
         return display.isBlank()?ref.name():display;
     }

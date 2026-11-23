@@ -24,6 +24,7 @@ import type { Client } from '../types';
 import ProductSidebar from '../pages/products/Sidebar';
 import ReferenceSidebar from '../pages/references/Sidebar';
 import ProjectSidebar from '../pages/projects/Sidebar';
+import LibrarySidebar from '../pages/library/Sidebar';
 
 type Icon = ComponentType<{ size?: number; 'aria-hidden'?: boolean | 'true' }>;
 type NavItem = { to: string; label: string; icon: Icon; also?: string[] };
@@ -75,8 +76,9 @@ export const SECTIONS: Section[] = [
   {
     key: 'assets',
     label: '资产库',
-    home: '/gallery',
+    home: '/library',
     paths: [
+      '/library',
       '/gallery',
       '/queue',
       '/review',
@@ -228,6 +230,8 @@ export default function Shell({
             <ProductSidebar />
           ) : section.key === 'refs' ? (
             <ReferenceSidebar />
+          ) : section.key === 'assets' ? (
+            <LibrarySidebar />
           ) : (
             <>
               <nav className="gy-snav" aria-label={`${section.label}子页面`}>
