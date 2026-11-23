@@ -4,6 +4,7 @@ import { post, put } from '../../api';
 import { useWorkspace } from '../../components/UI';
 import { Btn, Card, Dialog, Notice } from '../../gy/ui';
 import { sec, SHOT_TASKS, thumbUrl } from '../references/data';
+import { missingStages, stagesFor } from '../../convcheck';
 import {
   AD_CAT_LABEL,
   adCheck,
@@ -216,7 +217,9 @@ export function ConvBar({
   skeleton?: number;
 }) {
   const total = shots.length ? shots[shots.length - 1].end : 0;
-  const missing = SHOT_TASKS.filter((t) => !tasks.includes(t));
+  const stages = stagesFor(skeleton);
+  const short = stages.length < SHOT_TASKS.length;
+  const missing = missingStages(tasks, stages);
   return (
     <Card className="gy-pjs gy-cvbar">
       <h3>
@@ -260,7 +263,13 @@ export function ConvBar({
         {missing.length ? (
           missing.map((t) => <span key={t}>还没有「{t}」的镜头</span>)
         ) : (
-          <span className="ok">7 个任务都有镜头了</span>
+          <span className="ok">{short ? '15 秒该有的几段都有镜头了' : '7 个任务都有镜头了'}</span>
+        )}
+        {short && (
+          <small className="gy-muted">
+            15 秒只查开头、给出方案、建立信任和收尾（打消顾虑 / 促进决定 /
+            推动下单有一个就行）；建立需求可以并进相邻镜头。
+          </small>
         )}
       </div>
     </Card>

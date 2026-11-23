@@ -28,9 +28,14 @@ public class Store {
     Project snapshot(String text) {
         try { return json.readValue(text,Project.class); } catch(Exception e) { throw new IllegalStateException("任务快照格式错误",e); }
     }
+    /** 账号能进哪些客户：主账号自己的客户；同一团队的管理员能进团队全部客户；其他角色只能进分给他的客户。停用的账号哪里都进不去。 */
+    static final String VISIBLE_CLIENTS="SELECT c.* FROM clients c JOIN app_users u ON u.username=? WHERE u.status<>'DISABLED' AND (c.owner=u.username OR (c.owner=u.team_owner AND (u.role='ADMIN' OR EXISTS(SELECT 1 FROM client_members m WHERE m.client_id=c.id AND m.username=u.username))))";
     void access(String client, String user) {
-        if (db.queryForObject("SELECT COUNT(*) FROM clients WHERE id=? AND owner=?",Integer.class,client,user)==0)
+        if (db.queryForObject("SELECT COUNT(*) FROM ("+VISIBLE_CLIENTS+" AND c.id=?) v",Integer.class,user,client)==0)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"客户不存在或无权访问");
+    }
+    List<Client> visibleClients(String user) {
+        return db.query(VISIBLE_CLIENTS+" ORDER BY c.created_at",clients,user);
     }
     void audit(String client, String user, String action, String detail) {
         db.update("INSERT INTO audit_events VALUES(?,?,?,?,?,?)",id(),client,user,action,detail.substring(0,Math.min(500,detail.length())),now());

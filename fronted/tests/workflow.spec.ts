@@ -106,7 +106,8 @@ test('contact assignment and batch drafts persist independently of generation jo
   page,
 }) => {
   const contact = '剪辑联系人 ' + Date.now();
-  await page.goto('/team');
+  // 分工联系人是以前的页面，新版团队管理占了 /team，它挪到 /team/contacts
+  await page.goto('/team/contacts');
   await page.getByRole('button', { name: '新增分工联系人' }).click();
   let dialog = page.getByRole('dialog');
   await dialog.getByLabel('联系人姓名').fill(contact);

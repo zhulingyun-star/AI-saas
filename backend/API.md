@@ -6,10 +6,10 @@
 | --- | --- |
 | GET `/auth/csrf` | 获取匿名/登录会话 CSRF token |
 | POST `/auth/login` | `{username,password}`，建立会话 |
-| GET `/auth/me` | 当前用户 |
+| GET `/auth/me` | 当前用户：`{username,displayName,role,roleLabel,status,owner,canManage}`（V13 起多了后面几项） |
 | POST `/auth/logout` | 注销并使会话失效，204 |
 | GET `/system` | 当前 AI 模式与能力边界，不返回密钥 |
-| GET / POST `/clients` | 当前用户的客户列表 / 新建 `{name,category}` |
+| GET / POST `/clients` | 当前账号能进的客户列表 / 新建 `{name,category}`（V13 起只有管理员能新建，记在团队主账号名下） |
 
 以下接口均以 `/clients/{clientId}` 为前缀，服务端校验当前用户是否为客户所有者。错误客户、跨用户客户统一返回 404。
 
@@ -208,3 +208,27 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 - 该换新了（只看曝光大于 0 的记录，按日期排，至少 3 条才判断，每条记录算一个点）：最近 7 条里有 6 条以上时，后 3 条平均点击率比前 3 条低 30% 以上；最近 3 条的平均负反馈率超过 0.8%；最近 3 条的 3 秒留存平均低于 25%（没有「有效播放」这一项，用 3 秒留存代替）。
 - 「哪种赢了」在前端按列表里每条成片的累计分组：每条先算自己的累计，再在组里取平均（每条分量一样），少于 3 条的分组标“样本太少”。不做出价、预算、预测或打分。
 - 新表：`job_performance`（一条投放记录：成片、起止日期、各项数字、备注、来源 MANUAL/IMPORT、导入批次、revision、谁改的）、`performance_imports`（每次导入：文件名、行数、导入 / 跳过 / 有问题的行数、谁导的）。
+
+## 团队管理（V13）
+
+一支团队 = 一个主账号（部署时用 `ADMIN_USERNAME` 建的账号，`app_users.team_owner` 指向它）和它开通的账号；团队的客户就是主账号名下的客户。已有账号迁移后都是自己团队的主账号 + 管理员，原来的访问范围不变。
+
+- 能进哪些客户（`Store.access`，所有 `/clients/{clientId}` 接口都走它）：主账号自己的客户；同团队的管理员能进全部；其他角色只能进 `client_members` 里分给他的客户。停用的账号哪里都进不去，进不去统一 404。
+- 角色：`ADMIN` 管理员、`LEAD` 客户负责人、`BUYER` 投手、`MAKER` 内容制作、`VIEWER` 只读。客户空间里的修改操作（非 GET）按角色拦（`RoleGuard`，403 + 中文原因）：只读什么都不能改；内容制作不能审片（`/jobs/{id}/verdict`、`/jobs/{id}/reviews`）、不能填或导入投放数据（`/jobs/{id}/performance*`、`/performance-imports*`、`/metrics/import`）、不能改客户知识（`/presets*`）；投手不能改客户知识。
+- 状态：`PENDING` 待首次登录（第一次登录成功后变 `ACTIVE`）、`ACTIVE` 正常、`DISABLED` 已停用（登录返回 401「账号或密码错误」）。
+- 密码：管理员开通或重设时设定，至少 12 位、不超过 72 字节、不能和登录账号一样；只存 BCrypt 摘要，任何接口都不返回，操作记录里也不写。
+
+以下以 `/api/team` 为前缀，写操作需要 CSRF。
+
+| 方法与路径 | 谁能用 | 说明 |
+|---|---|---|
+| GET `/members` | 团队里没停用的账号 | `{members:[{username,displayName,role,status,owner,you,createdAt,lastLoginAt,revision,allClients,clients:[{id,name}]}],clients:[{id,name,category}],canManage,you}` |
+| POST `/members` | 管理员 | 开通 `{username,displayName,role,clientIds,password}`；登录账号 3–60 位英文字母、数字或 `._@-`，重名（不分大小写）409；管理员不用分配客户 |
+| PUT `/members/{username}` | 管理员 | 改 `{displayName,role,clientIds,revision}`；主账号一直是管理员；不能改自己的角色；版本号过期 409 |
+| PUT `/members/{username}/status` | 管理员 | `{enabled,revision}` 停用 / 重新启用；主账号和自己不能停用 |
+| PUT `/members/{username}/password` | 管理员 | `{password,revision}` 重设别人的密码；主账号的密码只能主账号自己改 |
+| PUT `/me/password` | 自己 | `{current,next}`，要先输对现在的密码 |
+| GET `/events` | 管理员 | 最近 20 条成员变更（开通、改角色和负责客户、停用、重设密码），不含任何密码 |
+| GET `/workload` | 团队里没停用的账号 | 只算当前账号能进的客户。`members[]`：每人手上的项目数、进行中（还没有可投放版本）、待审片、出片中、最近 7 天审片数和项目列表；`clients[]`：客户负责人、分到的成员、进行中 / 待审片 / 出片中；`unassignedProjects`：负责人不是团队账号的项目数。项目的负责人 = `work_flow.assignee`（新建项目时默认是建项目的账号） |
+
+新表：`client_members(client_id, username)`、`team_events`；`app_users` 加了 `display_name, role, status, team_owner, created_at, last_login_at, revision`。旧的分工联系人（`/clients/{clientId}/team`）不动，页面挪到 `/team/contacts`。

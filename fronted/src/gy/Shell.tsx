@@ -17,7 +17,6 @@ import {
   Plus,
   Shirt,
   User,
-  Users,
   Video,
 } from 'lucide-react';
 import type { Client } from '../types';
@@ -25,6 +24,7 @@ import ProductSidebar from '../pages/products/Sidebar';
 import ReferenceSidebar from '../pages/references/Sidebar';
 import ProjectSidebar from '../pages/projects/Sidebar';
 import LibrarySidebar from '../pages/library/Sidebar';
+import TeamSidebar from '../pages/team/Sidebar';
 
 type Icon = ComponentType<{ size?: number; 'aria-hidden'?: boolean | 'true' }>;
 type NavItem = { to: string; label: string; icon: Icon; also?: string[] };
@@ -114,7 +114,6 @@ export const SECTIONS: Section[] = [
     label: '团队管理',
     home: '/team',
     paths: ['/team'],
-    groups: [['团队', [{ to: '/team', label: '分工联系人', icon: Users }]]],
   },
 ];
 
@@ -135,6 +134,9 @@ export default function Shell({
   client,
   clients,
   username,
+  displayName,
+  roleLabel,
+  canCreateClient = true,
   onSwitch,
   onCreateClient,
   onLogout,
@@ -143,6 +145,10 @@ export default function Shell({
   client: Client;
   clients: Client[];
   username: string;
+  displayName?: string;
+  roleLabel?: string;
+  /** 只有管理员能新建客户（后端也会拦） */
+  canCreateClient?: boolean;
   onSwitch: (id: string) => void;
   onCreateClient: () => void;
   onLogout: () => void;
@@ -197,19 +203,24 @@ export default function Shell({
               ))}
             </select>
             <ChevronDown size={12} className="chev" aria-hidden="true" />
-            <button
-              type="button"
-              className="gy-icon-btn"
-              aria-label="新建客户"
-              title="新建客户"
-              onClick={onCreateClient}
-            >
-              <Plus size={14} />
-            </button>
+            {canCreateClient && (
+              <button
+                type="button"
+                className="gy-icon-btn"
+                aria-label="新建客户"
+                title="新建客户"
+                onClick={onCreateClient}
+              >
+                <Plus size={14} />
+              </button>
+            )}
           </span>
-          <span className="gy-username">{username}</span>
+          <span className="gy-username" title={`登录账号 ${username}`}>
+            {displayName ?? username}
+            {roleLabel ? ` · ${roleLabel}` : ''}
+          </span>
           <span className="gy-avatar" aria-hidden="true">
-            {username.slice(0, 1).toUpperCase()}
+            {(displayName ?? username).slice(0, 1).toUpperCase()}
           </span>
           <button
             type="button"
@@ -232,6 +243,8 @@ export default function Shell({
             <ReferenceSidebar />
           ) : section.key === 'assets' ? (
             <LibrarySidebar />
+          ) : section.key === 'team' ? (
+            <TeamSidebar />
           ) : (
             <>
               <nav className="gy-snav" aria-label={`${section.label}子页面`}>

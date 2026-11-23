@@ -21,7 +21,7 @@ import java.util.Map;
 public class SecurityConfig {
     @Bean PasswordEncoder passwords() { return new BCryptPasswordEncoder(); }
     @Bean UserDetailsService users(Store s) {
-        return name -> s.db.query("SELECT * FROM app_users WHERE username=?",(r,n)->User.withUsername(r.getString("username")).password(r.getString("password")).roles("USER").build(),name)
+        return name -> s.db.query("SELECT * FROM app_users WHERE username=?",(r,n)->User.withUsername(r.getString("username")).password(r.getString("password")).roles("USER").disabled("DISABLED".equals(r.getString("status"))).build(),name)
             .stream().findFirst().orElseThrow(()->new UsernameNotFoundException("账号或密码错误"));
     }
     @Bean AuthenticationManager authenticationManager(UserDetailsService users, PasswordEncoder encoder) {
@@ -43,15 +43,17 @@ public class SecurityConfig {
 @RestController
 @RequestMapping("/api/auth")
 class AuthController {
-    private final AuthenticationManager auth;
-    AuthController(AuthenticationManager auth) {this.auth=auth;}
+    private final AuthenticationManager auth; private final TeamService team;
+    AuthController(AuthenticationManager auth,TeamService team) {this.auth=auth;this.team=team;}
     @GetMapping("/csrf") Map<String,String> csrf(CsrfToken token) { return Map.of("token",token.getToken(),"headerName",token.getHeaderName()); }
     @PostMapping("/login") Map<String,String> login(@Valid @RequestBody Models.Login login,HttpServletRequest req,HttpServletResponse res) {
         Authentication result=auth.authenticate(UsernamePasswordAuthenticationToken.unauthenticated(login.username(),login.password()));
         if(req.getSession(false)!=null) req.changeSessionId();
         var context=SecurityContextHolder.createEmptyContext(); context.setAuthentication(result); SecurityContextHolder.setContext(context);
         new HttpSessionSecurityContextRepository().saveContext(context,req,res);
+        team.loggedIn(result.getName());
         return Map.of("username",result.getName());
     }
-    @GetMapping("/me") Map<String,String> me(Principal user) { return Map.of("username",user.getName()); }
+    /** 当前账号：账号名、显示名、角色。界面右上角和团队管理用 */
+    @GetMapping("/me") Map<String,Object> me(Principal user) { return team.me(user.getName()); }
 }

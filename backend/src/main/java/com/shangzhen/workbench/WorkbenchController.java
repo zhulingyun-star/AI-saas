@@ -13,12 +13,14 @@ import static com.shangzhen.workbench.Models.*;
 @RestController
 @RequestMapping("/api")
 public class WorkbenchController {
-    private final Store s; private final ProjectService projects; private final MediaService media; private final AiService ai; private final MetricsService metrics; private final VideoApiClient video;
-    public WorkbenchController(Store s,ProjectService projects,MediaService media,AiService ai,MetricsService metrics,VideoApiClient video) {this.s=s;this.projects=projects;this.media=media;this.ai=ai;this.metrics=metrics;this.video=video;}
+    private final Store s; private final ProjectService projects; private final MediaService media; private final AiService ai; private final MetricsService metrics; private final VideoApiClient video; private final TeamService team;
+    public WorkbenchController(Store s,ProjectService projects,MediaService media,AiService ai,MetricsService metrics,VideoApiClient video,TeamService team) {this.s=s;this.projects=projects;this.media=media;this.ai=ai;this.metrics=metrics;this.video=video;this.team=team;}
     @GetMapping("/system") Map<String,Object> system() {return Map.of("aiMode",ai.mode,"videoProviderConnected",video.enabled(),"videoModel",video.model(),"localExport","FFmpeg / MP4 + SRT","version","0.1.0");}
-    @GetMapping("/clients") List<Client> clients(Principal u) {return s.db.query("SELECT * FROM clients WHERE owner=? ORDER BY created_at",s.clients,u.getName());}
+    @GetMapping("/clients") List<Client> clients(Principal u) {return s.visibleClients(u.getName());}
+    /** 新客户记在团队主账号名下，团队里的管理员都能看到；只有管理员能新建 */
     @PostMapping("/clients") Client createClient(Principal u,@Valid @RequestBody ClientInput p) {
-        String id=Store.id();s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",id,u.getName(),p.name(),p.category(),Store.now());return s.db.queryForObject("SELECT * FROM clients WHERE id=?",s.clients,id);
+        String owner=team.requireAdmin(u.getName()).teamOwner();
+        String id=Store.id();s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",id,owner,p.name(),p.category(),Store.now());return s.db.queryForObject("SELECT * FROM clients WHERE id=?",s.clients,id);
     }
     @GetMapping("/clients/{c}/overview") Map<String,Object> overview(Principal u,@PathVariable String c) {
         s.access(c,u.getName());

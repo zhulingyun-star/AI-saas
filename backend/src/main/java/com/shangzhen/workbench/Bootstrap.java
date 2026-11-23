@@ -13,7 +13,7 @@ public class Bootstrap implements CommandLineRunner {
     @Override @Transactional public void run(String... args) {
         if(password.length()<12)throw new IllegalArgumentException("ADMIN_PASSWORD 至少需要 12 位");
         if(s.db.queryForObject("SELECT COUNT(*) FROM app_users WHERE username=?",Integer.class,username)>0)return;
-        s.db.update("INSERT INTO app_users VALUES(?,?)",username,encoder.encode(password));
+        s.db.update("INSERT INTO app_users(username,password,display_name,role,status,team_owner,created_at) VALUES(?,?,?,?,?,?,?)",username,encoder.encode(password),"","ADMIN","ACTIVE",username,Store.now());
         for(String[] c:new String[][]{{"轻羽 · 服饰内容组","服饰鞋包"},{"露米 · 美妆内容组","美妆个护"}}) {
             String id=Store.id();s.db.update("INSERT INTO clients VALUES(?,?,?,?,?)",id,username,c[0],c[1],Store.now());
             s.db.update("INSERT INTO presets VALUES(?,?,?,?,?,?,?)",Store.id(),id,"商品事实优先","RULE","未提供的价格、材质、性能和功效必须标注待确认，不得编造。",true,Store.now());

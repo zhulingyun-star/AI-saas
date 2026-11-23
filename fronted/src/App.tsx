@@ -30,12 +30,17 @@ import VideoList from './pages/library/VideoList';
 import VideoDetail from './pages/library/VideoDetail';
 import ImportPage from './pages/library/ImportPage';
 import { TiredView, WinView } from './pages/library/Insights';
+import Members from './pages/team/Members';
+import MemberNew from './pages/team/MemberNew';
+import Roles from './pages/team/Roles';
+import Workload from './pages/team/Workload';
+import type { Me } from './pages/team/data';
 export default function App() {
   const cache = useQueryClient();
   const navigate = useNavigate();
   const me = useQuery({
     queryKey: ['me'],
-    queryFn: () => request<{ username: string }>('/auth/me'),
+    queryFn: () => request<Me>('/auth/me'),
   });
   const clients = useQuery({
     queryKey: ['clients'],
@@ -107,6 +112,25 @@ export default function App() {
       </form>
     </Modal>
   );
+  if (!client && me.data.canManage === false)
+    return (
+      <div className="login">
+        <section className="login-form">
+          <h2>还没有分给你的客户</h2>
+          <p>请联系团队管理员，在「团队管理 · 成员与权限」里给你分配负责的客户。</p>
+          <button
+            onClick={async () => {
+              await request('/auth/logout', { method: 'POST' });
+              resetCsrf();
+              cache.clear();
+              me.refetch();
+            }}
+          >
+            退出登录
+          </button>
+        </section>
+      </div>
+    );
   if (!client)
     return (
       <>
@@ -120,6 +144,9 @@ export default function App() {
         client={client}
         clients={clients.data ?? []}
         username={me.data.username}
+        displayName={me.data.displayName || me.data.username}
+        roleLabel={me.data.roleLabel}
+        canCreateClient={me.data.canManage !== false}
         onSwitch={(id) => {
           setActive(id);
           localStorage.setItem('shangzhen-client', id);
@@ -149,7 +176,12 @@ export default function App() {
           <Route path="/tasks" element={<Legacy page={<Tasks />} />} />
           <Route path="/content" element={<Legacy page={<ContentHome />} />} />
           <Route path="/gallery" element={<Legacy page={<Gallery />} />} />
-          <Route path="/team" element={<Legacy page={<Team />} />} />
+          {/* 团队管理：成员与权限、新增成员、角色与权限、工作负荷；以前的分工联系人挪到 /team/contacts */}
+          <Route path="/team" element={<Members />} />
+          <Route path="/team/new" element={<MemberNew />} />
+          <Route path="/team/roles" element={<Roles />} />
+          <Route path="/team/workload" element={<Workload />} />
+          <Route path="/team/contacts" element={<Legacy page={<Team />} />} />
           <Route path="/studio" element={<Legacy page={<Studio />} />} />
           <Route path="/studio/:id" element={<Legacy page={<Studio />} />} />
           <Route path="/batch" element={<Legacy page={<Batch />} />} />
