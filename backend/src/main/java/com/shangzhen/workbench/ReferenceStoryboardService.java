@@ -33,11 +33,13 @@ public class ReferenceStoryboardService {
     private final AtomicBoolean working=new AtomicBoolean();
     private final org.springframework.jdbc.core.RowMapper<State> rows=(r,n)->new State(r.getString("client_id"),r.getString("asset_id"),r.getString("status"),r.getInt("revision"),r.getString("report_json"),r.getString("request_json"),r.getString("calls_json"),r.getString("error"));
     public ReferenceStoryboardService(Store s,MediaService media,@Value("${app.ai.mode}") String mode,@Value("${app.ai.base-url}") String url,@Value("${app.ai.api-key}") String key,@Value("${app.ai.model}") String model,@Value("${app.ffmpeg:ffmpeg}") String ffmpeg,@Value("${app.ffprobe:ffprobe}") String ffprobe){this.s=s;this.media=media;this.mode=mode;this.url=url;this.key=key;this.model=model;this.ffmpeg=ffmpeg;this.ffprobe=ffprobe;}
+    /** 读片模型是否已配置（本地模式下为 false，不会发起任何请求）。 */
+    public boolean enabled(){return mode.equals("openai")&&!key.isBlank();}
     private void reference(String client,String asset){var a=s.asset(client,asset);if(!a.kind().equals("REFERENCE")||!a.mime().startsWith("video/"))throw Store.bad("请选择参考视频");}
     private State row(String client,String asset){return s.db.query("SELECT * FROM reference_storyboards WHERE client_id=? AND asset_id=?",rows,client,asset).stream().findFirst().orElse(null);}
     private Report report(State r){return r==null||r.report()==null?null:readReport(r.report());}
     private Report readReport(String value){try{return s.json.readValue(value,Report.class);}catch(Exception e){throw Store.bad("分镜格式无效");}}
-    public Map<String,Object> get(String client,String asset){reference(client,asset);State r=row(client,asset);Map<String,Object> out=new LinkedHashMap<>();out.put("status",r==null?"EMPTY":r.status());out.put("revision",r==null?0:r.revision());out.put("model",model);out.put("enabled",mode.equals("openai")&&!key.isBlank());out.put("error",r==null?"":r.error());out.put("calls",r==null?List.of():s.read(r.calls(),new TypeReference<List<Map<String,Object>>>(){}));if(report(r)!=null)out.put("report",report(r));
+    public Map<String,Object> get(String client,String asset){reference(client,asset);State r=row(client,asset);Map<String,Object> out=new LinkedHashMap<>();out.put("status",r==null?"EMPTY":r.status());out.put("revision",r==null?0:r.revision());out.put("model",model);out.put("enabled",enabled());out.put("error",r==null?"":r.error());out.put("calls",r==null?List.of():s.read(r.calls(),new TypeReference<List<Map<String,Object>>>(){}));if(report(r)!=null)out.put("report",report(r));
         if(r!=null&&r.request()!=null){JsonNode input=s.json.valueToTree(s.read(r.request(),new TypeReference<Map<String,Object>>(){}));JsonNode p=input.path("progress");long now=System.currentTimeMillis(),end=p.path("finishedAt").asLong(now),start=input.path("startedAt").asLong(end);out.put("progress",Map.of("phase",r.status().equals("COMPLETED")?"分析完成":r.status().equals("FAILED")?"分析未完成":p.path("phase").asText(r.status().equals("QUEUED")?"等待开始":"正在处理"),"elapsedSeconds",Math.max(0,(end-start)/1000),"stageSeconds",Math.max(0,(end-p.path("stageStartedAt").asLong(end))/1000)));}
         return out;}
     private void progress(State task,String phase,List<Map<String,Object>> calls,boolean finished){
@@ -78,6 +80,7 @@ public class ReferenceStoryboardService {
         var tx=new org.springframework.transaction.support.TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(Objects.requireNonNull(s.db.getDataSource())));
         tx.executeWithoutResult(status->{
             s.db.update("DELETE FROM reference_storyboards WHERE client_id=? AND asset_id=?",client,asset);
+            s.db.update("DELETE FROM reference_profiles WHERE client_id=? AND asset_id=?",client,asset);
             if(s.db.update("DELETE FROM assets WHERE client_id=? AND id=? AND kind='REFERENCE'",client,asset)!=1)throw conflict();
             s.audit(client,user,"删除参考视频",name);
         });

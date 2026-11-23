@@ -3,14 +3,10 @@ import { request } from '../../api';
 import { useData, useWorkspace } from '../../components/UI';
 import { productGroups, type ProductGroup } from '../../productGroups';
 import type { Asset } from '../../types';
+import type { Folder } from '../../gy/folders';
 
-export interface Folder {
-  id: string;
-  parentId?: string | null;
-  name: string;
-  sortOrder: number;
-  revision: number;
-}
+export { folderPath, folderScope, type Folder } from '../../gy/folders';
+
 export interface AnalysisSummary {
   status: string;
   revision: number;
@@ -165,16 +161,6 @@ export function useRefreshLibrary() {
     ]);
 }
 
-/** 文件夹本身和它的子文件夹 */
-export function folderScope(folders: Folder[], id: string) {
-  return new Set([id, ...folders.filter((f) => f.parentId === id).map((f) => f.id)]);
-}
-export function folderPath(folders: Folder[], id: string | null | undefined) {
-  const f = folders.find((x) => x.id === id);
-  if (!f) return '未分类';
-  const parent = folders.find((x) => x.id === f.parentId);
-  return parent ? `${parent.name} / ${f.name}` : f.name;
-}
 /** 需要核对：还没分析、分析失败、分析结果没核对完或已过时 */
 export function needsReview(p: ProductItem) {
   const a = p.info?.analysis;

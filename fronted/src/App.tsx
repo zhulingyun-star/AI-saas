@@ -14,7 +14,6 @@ import Queue from './pages/Queue';
 import Batch from './pages/Batch';
 import Presets from './pages/Presets';
 import Analytics from './pages/Analytics';
-import Reference from './pages/Reference';
 import VideoRemake from './pages/VideoRemake';
 import ProjectEcommerceStart from './pages/ProjectEcommerceStart';
 import Shell, { Legacy } from './gy/Shell';
@@ -22,6 +21,9 @@ import ProductList from './pages/products/ProductList';
 import ProductNew from './pages/products/ProductNew';
 import ProductDetail from './pages/products/ProductDetail';
 import ProductReview from './pages/products/ProductReview';
+import ReferenceList from './pages/references/ReferenceList';
+import ReferenceDetail from './pages/references/ReferenceDetail';
+import { ReferencePickerDemo } from './pages/references/ReferencePicker';
 export default function App() {
   const cache = useQueryClient();
   const navigate = useNavigate();
@@ -154,7 +156,13 @@ export default function App() {
             element={<Legacy page={<Assets key="wardrobe" kind="GARMENT" />} />}
           />
           <Route path="/voices" element={<Legacy page={<Assets key="voices" kind="VOICE" />} />} />
-          <Route path="/reference" element={<Legacy page={<Reference />} />} />
+          <Route path="/references" element={<ReferenceList />} />
+          <Route path="/references/:id" element={<ReferenceDetail />} />
+          {/* 旧的参考片拆解页地址，跳到新的参考视频库 */}
+          <Route path="/reference" element={<Navigate to="/references" replace />} />
+          {import.meta.env.DEV && (
+            <Route path="/dev/reference-picker" element={<ReferencePickerDemo />} />
+          )}
           <Route path="/analytics" element={<Legacy page={<Analytics />} />} />
           <Route path="/presets" element={<Legacy page={<Presets />} />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -311,7 +311,7 @@ test('new frame keeps old routes and opens 项目 by default', async ({ page }) 
   await expect(page.locator('.gy-wordmark')).toHaveText('光影云');
   await expect(page.getByLabel('切换客户')).toHaveValue('c');
   for (const [section, path] of [
-    ['参考视频', '/reference'],
+    ['参考视频', '/references'],
     ['资产库', '/gallery'],
     ['团队管理', '/team'],
     ['商品库', '/products'],

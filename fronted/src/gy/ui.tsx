@@ -200,12 +200,15 @@ export function Dialog({
   children,
   footer,
   wide,
+  width,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  /** 自定义宽度（像素），窄屏时不超过屏幕 */
+  width?: number;
 }) {
   useEscape(onClose);
   return (
@@ -217,6 +220,7 @@ export function Dialog({
     >
       <section
         className={`gy-dialog${wide ? ' wide' : ''}`}
+        style={width ? { width: `min(${width}px, 100%)` } : undefined}
         role="dialog"
         aria-modal="true"
         aria-label={title}

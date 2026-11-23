@@ -115,3 +115,24 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 人群 `hooks` 只能取 8 种开头类型：痛点型、反常识型、对比型、结果前置型、价格型、人群锁定型、悬念型、身份代入型。
 
 新表：`product_folders`（文件夹）、`product_profiles`（商品所在文件夹、核对进度、人群是否已保存）、`product_understandings`（商品理解）、`product_personas`（目标人群）。
+
+## 参考视频库（V9）
+
+以下仍以 `/api/clients/{clientId}` 为前缀，均校验客户所有者，写操作需要 CSRF。参考视频就是 `kind=REFERENCE` 的视频素材；上传（POST `/assets`，`kind=REFERENCE`）、拆解（GET / POST / PUT `/assets/{asset}/storyboard`、`/storyboard/thumbnail`）和删除（DELETE `/assets/{asset}/reference`）沿用原接口和状态机，本节只是在它们之上加了文件夹、显示名和人工标注。
+
+| 接口 | 请求与语义 |
+| --- | --- |
+| GET `/reference-library` | `{folders:[{id,parentId,name,sortOrder,revision}], references:[参考视频], analysisEnabled}`，参考视频按上传时间倒序。每条：`{assetId,name,fileName,mime,sizeBytes,createdAt,folderId?,hook?,storyboard:{status,revision,hasReport,error,duration?,shotCount?,lineCount?},usedBy:[{id,name,kind}]}`。`name` 是显示名，没改过时等于文件名；`analysisEnabled=false` 表示读片模型没配置（`AI_MODE=local`），POST storyboard 会返回 400 |
+| GET `/references/{asset}` | 单条参考视频，字段同上，另加 `shotTasks:{镜头id:任务}`、`labelRevision`。不是参考视频返回 404 |
+| POST `/reference-folders` | `{name,parentId?}` 新建文件夹。规则与商品库相同（同一份 `LibraryFolders` 代码）：最多两层；同一客户内名称唯一；`全部参考视频`、`未分类` 为固定分类，不能用作名称。商品库和参考视频库的文件夹互不影响 |
+| PUT `/reference-folders/{id}` | `{name,revision}` 改名，revision 不一致返回 409 |
+| DELETE `/reference-folders/{id}` | 只能删除没有子文件夹、没有参考视频的文件夹，204 |
+| PUT `/references/{asset}/folder` | `{folderId}` 移动；为空表示放回未分类。一条参考视频只在一个文件夹 |
+| PUT `/references/{asset}/name` | `{name,revision}` 改显示名（1–60 字），不改素材文件名。冲突 409 |
+| PUT `/references/{asset}/labels` | `{hook?,shotTasks:{镜头id:任务},revision}` 人工标注。`hook` 为 8 种开头类型之一，空值表示还没标；任务只能取 抓住注意力、建立需求、给出方案、建立信任、打消顾虑、促进决定、推动下单，空值表示不标。镜头 id 必须是当前拆解结果里的镜头（否则 409）；没有拆解结果时只能标开头类型。名称和标注共用 `labelRevision`，冲突 409 |
+
+- 拆解结果里没有开头类型和每镜任务，系统不推断，默认都是“还没标”。每镜任务保存时会记下镜头的起止时间；重新拆解或改了镜头区间后，对不上的旧任务不再返回。
+- `usedBy`（被哪些项目用过）只按真实记录算：`remake_drafts` 里这条视频所属的项目，加上作品 `config.referenceLinks[].assetId` 指向这条视频的作品（作品属于项目时算那个项目，没属于项目的作品单独列出，`kind=work`）。同一项目只算一次。
+- 删除参考视频（原接口）时一并删除它的库信息；被改编稿或作品引用的仍然不能删（409）。
+
+新表：`reference_folders`（文件夹）、`reference_profiles`（所在文件夹、显示名、开头类型、每镜任务 JSON、revision）。

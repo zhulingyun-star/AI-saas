@@ -18,15 +18,14 @@ public class ProductLibraryService {
     static final Set<String> RESERVED=Set.of("全部商品","未分类","待核对");
     /** 核对时已经补充过答案的「需要确认」条目以此结尾，不再算作待确认。 */
     static final String DONE="（已补充）";
-    static final int MAX_FOLDERS=200,MAX_PERSONAS=12,MAX_TAGS=12,TAG_LENGTH=60;
+    static final int MAX_PERSONAS=12,MAX_TAGS=12,TAG_LENGTH=60;
     private static final Pattern RISKY=Pattern.compile("价格|售价|原价|优惠|折扣|包邮|[0-9]+\\s*元|¥|￥|产地|原产|功效|疗效|治疗|治愈");
     private static final TypeReference<List<String>> STRINGS=new TypeReference<>(){};
     private final Store s;private final MediaService media;private final ProductAnalysisService analysis;private final AiService ai;
-    public ProductLibraryService(Store s,MediaService media,ProductAnalysisService analysis,AiService ai){this.s=s;this.media=media;this.analysis=analysis;this.ai=ai;}
+    private final LibraryFolders folderRules;
+    public ProductLibraryService(Store s,MediaService media,ProductAnalysisService analysis,AiService ai){this.s=s;this.media=media;this.analysis=analysis;this.ai=ai;this.folderRules=new LibraryFolders(s,"product_folders","product_profiles","商品",RESERVED);}
 
-    public record Folder(String id,String parentId,String name,int sortOrder,int revision) {}
     public record Persona(String id,String name,String pain,String want,String tone,String scene,String worry,List<String> hooks,int revision) {}
-    private final RowMapper<Folder> folders=(r,n)->new Folder(r.getString("id"),r.getString("parent_id"),r.getString("name"),r.getInt("sort_order"),r.getInt("revision"));
     private final RowMapper<Map<String,Object>> profileRows=(r,n)->{Map<String,Object> m=new HashMap<>();m.put("group_id",r.getString("group_id"));m.put("folder_id",r.getString("folder_id"));m.put("confirmed_json",r.getString("confirmed_json"));m.put("reviewed_analysis_at",r.getString("reviewed_analysis_at"));m.put("personas_initialized",r.getBoolean("personas_initialized"));return m;};
     private final RowMapper<Map<String,Object>> understandingRows=(r,n)->Map.of("content_json",r.getString("content_json"),"source",r.getString("source"),"edited_count",r.getInt("edited_count"),"revision",r.getInt("revision"));
     private final RowMapper<Persona> personas=this::persona;
@@ -36,7 +35,7 @@ public class ProductLibraryService {
 
     // ---------- 列表汇总 ----------
     public Map<String,Object> library(String client) {
-        List<Folder> fs=s.db.query("SELECT * FROM product_folders WHERE client_id=? ORDER BY sort_order,created_at,id",folders,client);
+        List<LibraryFolders.Folder> fs=folderRules.list(client);
         Map<String,List<Asset>> groups=new LinkedHashMap<>();
         Map<String,String> keyOfAsset=new HashMap<>();
         for(Asset a:s.db.query("SELECT * FROM assets WHERE client_id=? AND kind='PRODUCT' ORDER BY created_at,id",s.assets,client)) {
@@ -88,49 +87,10 @@ public class ProductLibraryService {
         return out;
     }
 
-    // ---------- 文件夹 ----------
-    private String folderName(String raw) {
-        String name=Objects.toString(raw,"").trim();
-        if(name.isEmpty()||name.length()>30) throw Store.bad("文件夹名称需要 1 到 30 个字");
-        if(RESERVED.contains(name)) throw Store.bad("「"+name+"」是固定的分类名，换一个名字吧");
-        return name;
-    }
-    private Folder folder(String client,String id) {
-        return s.db.query("SELECT * FROM product_folders WHERE client_id=? AND id=?",folders,client,id).stream().findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"文件夹不存在"));
-    }
-    private void uniqueName(String client,String name,String except) {
-        if(s.db.queryForObject("SELECT COUNT(*) FROM product_folders WHERE client_id=? AND name=? AND id<>?",Integer.class,client,name,Objects.toString(except,""))>0)
-            throw Store.bad("已经有叫「"+name+"」的文件夹");
-    }
-    @Transactional
-    public Folder createFolder(String client,String user,String rawName,String parentId) {
-        String name=folderName(rawName);
-        if(s.db.queryForObject("SELECT COUNT(*) FROM product_folders WHERE client_id=?",Integer.class,client)>=MAX_FOLDERS) throw Store.bad("文件夹太多了，先整理一下再新建");
-        String parent=parentId==null||parentId.isBlank()?null:parentId;
-        if(parent!=null&&folder(client,parent).parentId()!=null) throw Store.bad("文件夹最多两层");
-        uniqueName(client,name,null);
-        Integer max=s.db.queryForObject("SELECT MAX(sort_order) FROM product_folders WHERE client_id=?",Integer.class,client);
-        String id=Store.id();
-        s.db.update("INSERT INTO product_folders(id,client_id,parent_id,name,sort_order,revision,created_at) VALUES(?,?,?,?,?,0,?)",id,client,parent,name,max==null?0:max+1,Store.now());
-        s.audit(client,user,"新建商品文件夹",name);
-        return folder(client,id);
-    }
-    @Transactional
-    public Folder renameFolder(String client,String user,String id,String rawName,int revision) {
-        folder(client,id);String name=folderName(rawName);uniqueName(client,name,id);
-        if(s.db.update("UPDATE product_folders SET name=?,revision=revision+1 WHERE client_id=? AND id=? AND revision=?",name,client,id,revision)==0)
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"文件夹刚被别人改过，请刷新后再改");
-        s.audit(client,user,"重命名商品文件夹",name);
-        return folder(client,id);
-    }
-    @Transactional
-    public void deleteFolder(String client,String user,String id) {
-        Folder f=folder(client,id);
-        if(s.db.queryForObject("SELECT COUNT(*) FROM product_folders WHERE client_id=? AND parent_id=?",Integer.class,client,id)>0) throw Store.bad("先移走或删除里面的子文件夹");
-        if(s.db.queryForObject("SELECT COUNT(*) FROM product_profiles WHERE client_id=? AND folder_id=?",Integer.class,client,id)>0) throw Store.bad("文件夹里还有商品，先把商品移走");
-        s.db.update("DELETE FROM product_folders WHERE client_id=? AND id=?",client,id);
-        s.audit(client,user,"删除商品文件夹",f.name());
-    }
+    // ---------- 文件夹（规则在 LibraryFolders，和参考视频库共用） ----------
+    @Transactional public LibraryFolders.Folder createFolder(String client,String user,String name,String parentId){return folderRules.create(client,user,name,parentId);}
+    @Transactional public LibraryFolders.Folder renameFolder(String client,String user,String id,String name,int revision){return folderRules.rename(client,user,id,name,revision);}
+    @Transactional public void deleteFolder(String client,String user,String id){folderRules.delete(client,user,id);}
 
     // ---------- 商品档案（文件夹、核对状态） ----------
     private Map<String,Object> profile(String client,String group) {
@@ -141,10 +101,10 @@ public class ProductLibraryService {
     }
     @Transactional
     public Map<String,Object> move(String client,String user,String anchor,String folderId) {
-        String target=folderId==null||folderId.isBlank()?null:folder(client,folderId).id();
+        String target=folderRules.target(client,folderId);
         String group=media.ensureProductGroup(client,anchor);ensureProfile(client,group);
         s.db.update("UPDATE product_profiles SET folder_id=?,updated_at=? WHERE client_id=? AND group_id=?",target,Store.now(),client,group);
-        s.audit(client,user,"移动商品",target==null?"未分类":folder(client,target).name());
+        s.audit(client,user,"移动商品",folderRules.label(client,target));
         return Map.of("groupId",group,"folderId",Objects.toString(target,""));
     }
     @Transactional

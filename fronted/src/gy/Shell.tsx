@@ -14,7 +14,6 @@ import {
   LogOut,
   Mic,
   PanelLeft,
-  Play,
   Plus,
   Shirt,
   User,
@@ -23,6 +22,7 @@ import {
 } from 'lucide-react';
 import type { Client } from '../types';
 import ProductSidebar from '../pages/products/Sidebar';
+import ReferenceSidebar from '../pages/references/Sidebar';
 
 type Icon = ComponentType<{ size?: number; 'aria-hidden'?: boolean | 'true' }>;
 type NavItem = { to: string; label: string; icon: Icon; also?: string[] };
@@ -60,13 +60,7 @@ export const SECTIONS: Section[] = [
     ],
   },
   { key: 'goods', label: '商品库', home: '/products', paths: ['/products'] },
-  {
-    key: 'refs',
-    label: '参考视频',
-    home: '/reference',
-    paths: ['/reference'],
-    groups: [['参考视频', [{ to: '/reference', label: '全部参考视频', icon: Play }]]],
-  },
+  { key: 'refs', label: '参考视频', home: '/references', paths: ['/references', '/reference'] },
   {
     key: 'assets',
     label: '资产库',
@@ -219,6 +213,8 @@ export default function Shell({
         <aside className="gy-side gy-new" aria-label={`${section.label}导航`}>
           {section.key === 'goods' ? (
             <ProductSidebar />
+          ) : section.key === 'refs' ? (
+            <ReferenceSidebar />
           ) : (
             <>
               <nav className="gy-snav" aria-label={`${section.label}子页面`}>
