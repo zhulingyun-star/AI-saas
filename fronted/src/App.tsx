@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUpRight, Film } from 'lucide-react';
+import { Film } from 'lucide-react';
 import { request, post, resetCsrf } from './api';
 import { Workspace, Loading, ErrorState, Modal, Field } from './components/UI';
 import type { Client } from './types';
@@ -231,7 +231,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <div className="brand">
           <Film size={28} />
           <span>
-            心流<small>电商内容生产工作台</small>
+            光影云<small>电商内容生产工作台</small>
           </span>
         </div>
         <div className="login-film">
@@ -245,7 +245,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <small>示例图片 · 不代表模型生成效果</small>
       </section>
       <section className="login-form">
-        <h2>登录工作空间</h2>
+        <h2>登录</h2>
         <form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -270,8 +270,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
           </Field>
           {error && <ErrorState error={new Error(error)} />}
           <button className="primary" disabled={busy}>
-            {busy ? '登录中…' : '进入工作空间'}
-            <ArrowUpRight size={17} />
+            {busy ? '登录中' : '登录'}
           </button>
         </form>
       </section>

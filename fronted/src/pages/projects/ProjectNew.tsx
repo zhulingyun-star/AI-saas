@@ -26,28 +26,28 @@ const MODES: [NewMode | 'STORY', string, string, string, string, typeof Film][] 
   [
     'REMAKE',
     '视频二创',
-    '照着一条参考视频的结构和节奏，换成你的商品。',
-    '拆镜头 → 换商品和台词 → 确认分镜',
-    '常用',
+    '按参考视频的结构和节奏，替换为你的商品。',
+    '拆镜头 → 替换商品与台词 → 确认分镜',
+    '',
     Film,
   ],
   [
     'FRAMEWORK',
     '框架模式',
-    '先出几套创作思路，挑一套再做分镜。',
-    '生成几套框架 → 选一套 → 确认分镜',
+    '从几套创作方向中选一套，再写分镜。',
+    '生成方向 → 选定 → 确认分镜',
     '',
     FileText,
   ],
   [
     'ONE_CLICK',
     '一键成片',
-    '核对资料后，自动出方案和分镜，再提交视频生成。',
-    '自动出方案和分镜 → 生成视频',
+    '确认资料后自动生成方案与分镜，提交视频生成。',
+    '自动出方案 → 生成视频',
     '',
     Sparkles,
   ],
-  ['STORY', '剧情模式', '围绕人物和情节设计原创故事，商品自然出场。', '', '即将开放', Users],
+  ['STORY', '剧情模式', '围绕人物与情节创作原创故事，商品自然出场。', '', '即将开放', Users],
 ];
 const MODE_PARAM: Record<string, NewMode> = {
   remake: 'REMAKE',
@@ -227,16 +227,12 @@ export default function ProjectNew() {
         <ChevronLeft size={14} aria-hidden="true" />
         返回项目列表
       </button>
-      <PageHead
-        title="新建项目"
-        description="选一个商品和一种创作方式；视频二创再选一条参考视频。确认一下就能开始。"
-      />
+      <PageHead title="新建项目" />
       <div className="gy-pjnew">
         <div className="gy-pjcol">
           <Card className="gy-pjs">
             <h3>
               <span className={`no${product ? ' ok' : ''}`}>{product ? '✓' : 1}</span>商品
-              <small>一个项目只能选一个商品</small>
             </h3>
             <ProductButton
               name={product?.group.productName}
@@ -280,7 +276,7 @@ export default function ProjectNew() {
                 <span className={`no${ref?.storyboard.hasReport ? ' ok' : ''}`}>
                   {ref?.storyboard.hasReport ? '✓' : 3}
                 </span>
-                参考视频<small>一个项目只用一条参考视频 · 只学结构和节奏，不放进成片</small>
+                参考视频<small>仅参考结构与节奏，不进入成片</small>
               </h3>
               {ref ? (
                 <ReferenceRow
@@ -295,7 +291,7 @@ export default function ProjectNew() {
               ) : (
                 <button type="button" className="gy-pickbox" onClick={() => setPicker('reference')}>
                   <b>选一条参考视频</b>
-                  <small>从参考视频库里选；也可以在弹窗里上传，会同步到库里并自动拆解</small>
+                  <small>从库里选，或上传新的</small>
                 </button>
               )}
               {report && (
@@ -320,7 +316,7 @@ export default function ProjectNew() {
               )}
               {report && (
                 <span className="gy-fine">
-                  上面是原视频的镜头和台词。创建后在「分镜」里逐镜换成你的商品，确认之前不会出片。
+                  原视频镜头与台词。在「分镜」步骤逐镜替换，确认前不会出片。
                   {report.summary ? ` 结构：${report.summary}` : ''}
                 </span>
               )}
@@ -328,12 +324,12 @@ export default function ProjectNew() {
           ) : (
             <Card className="gy-pjs">
               <h3>
-                <span className="no">3</span>接下来会怎样
+                <span className="no">3</span>接下来
               </h3>
               <div className="gy-infobox">
                 {mode === 'FRAMEWORK'
-                  ? '创建后先选给谁看和时长，按商品资料出几套方向，每套写清楚开头类型、前 3 秒怎么拍怎么说、卖点和场景。可以选几个方向一起测，每个方向各写一份分镜，确认分镜之前不会出片。'
-                  : '创建后填出片设置（给谁看、时长、风格等），点开始出片时自动写方向和分镜，接着出片。创建这一步不会出片。'}
+                  ? '选定人群与时长后生成 3 套方向，每套含开头类型、前 3 秒拍法、卖点与场景。可并行测多套。'
+                  : '填出片设置后开始，自动写方向与分镜并出片。'}
               </div>
             </Card>
           )}
@@ -379,17 +375,17 @@ export default function ProjectNew() {
           <Card className="gy-pjs">
             <h3>
               <span className={`no${factsOk ? ' ok' : ''}`}>{factsOk ? '✓' : 5}</span>核对商品事实
-              <small>视频里只会用这里写的事实</small>
+              <small>视频仅使用此处事实</small>
             </h3>
             <div className="gy-factwrap">
               <span className="src">
                 {analysis.data?.report
-                  ? `已带入商品分析（修订 ${analysis.data.revision}）的外观和质感 · 删掉没把握的性能或功效`
+                  ? `已带入商品分析（修订 ${analysis.data.revision}）`
                   : product
                     ? analysis.isPending
                       ? '正在读取商品分析…'
-                      : '这个商品还没有分析结果，可以手动写已经确认的事实'
-                    : '选了商品以后自动带入商品分析'}
+                      : '暂无分析，可手动填写'
+                    : '选定商品后自动带入分析'}
                 {product && <Link to={`/products/${product.anchorId}`}>查看商品分析</Link>}
               </span>
               <textarea
@@ -399,7 +395,7 @@ export default function ProjectNew() {
                 aria-label="商品事实"
                 value={facts}
                 disabled={!product}
-                placeholder="保留看得到、能证明的外观和卖点；没把握的性能和功效删掉。"
+                placeholder="只写能证明的外观和卖点"
                 onChange={(e) => {
                   setFacts(e.target.value);
                   setFactsOk(false);
@@ -469,13 +465,8 @@ export default function ProjectNew() {
             </span>
           )}
           <Btn variant="primary" wide busy={busy} disabled={!!block} onClick={() => void create()}>
-            {mode === 'REMAKE'
-              ? '创建项目，看方向'
-              : mode === 'FRAMEWORK'
-                ? '创建项目，去出方向'
-                : '创建项目，去填设置'}
+            创建项目
           </Btn>
-          <span className="gy-fine">这一步不会生成视频。</span>
           {err && <Notice tone="error">{err}</Notice>}
         </aside>
       </div>
