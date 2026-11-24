@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 光影云设计规范（按 docs/设计稿/光影云设计稿_v42.html 实现）。
  * 旧样式整体放进 legacy 层：未分层的新样式总是优先，旧页面的内部样式互不影响。
  * 新样式只用 gy- 前缀类名；基础元素的重置只作用在 .gy-new 里面（新框架和新页面），不影响旧页面。
@@ -1181,13 +1181,13 @@
   padding: 26px 36px 48px;
 }
 .gy-main > .gy-page {
-  max-width: 1440px;
+  max-width: none;
 }
 
 /* 旧页面放进新框架：只调整外边距和与新框架重复的页内导航 */
 .gy-legacy {
   min-width: 0;
-  max-width: 1440px;
+  max-width: none;
 }
 .gy-legacy main,
 .gy-legacy > main {
