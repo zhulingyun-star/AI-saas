@@ -2,7 +2,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '../outputs/production-workbench');
-const workspaceImport = fs.readFileSync(path.join(root, 'workspace-import.js'), 'utf8');
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
 let javascript = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
@@ -50,6 +49,5 @@ html = html.replace('<script src="production-flow.js"></script>', '<script>' + e
 html = html.replace('<script src="prompt-strategies.js"></script>', '<script>' + strategies.replace(/<\/script/gi, '<\\/script') + '</script>');
 html = html.replace('<script src="generation-ui.js"></script>', '<script>' + generationUi.replace(/<\/script/gi, '<\\/script') + '</script>');
 html = html.replace('<script src="app.js"></script>', '<script>' + javascript.replace(/<\/script/gi, '<\\/script') + '</script>');
-html = html.replace('<script src="workspace-import.js"></script>', '<script>' + workspaceImport + '</script>');
 fs.writeFileSync(path.resolve(__dirname, '../outputs/电商生产台.html'), html);
 console.log('Built self-contained workbench: ' + Buffer.byteLength(html) + ' bytes');

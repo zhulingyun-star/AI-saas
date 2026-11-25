@@ -16,4 +16,3 @@ outputs/production-workbench/*.json
 outputs/production-workbench/*.zip
 outputs/production-workbench/*.webm
 !outputs/production-workbench/服饰细节_本地粗剪_非AI生成.webm
-backend/silvamux.private.cjs

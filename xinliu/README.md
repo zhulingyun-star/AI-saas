@@ -15,8 +15,6 @@ node work/production-server.cjs
 
 打开 http://127.0.0.1:8767/#projects 。
 
-云端部署见[部署说明](./deploy/README.md)。公网配置明确访问源后强制原admin登录，Key在独立的服务器私有模块中，不随仓库或发布包分发。
-
 Windows 可双击 `outputs/启动网站.cmd`；升级后重启使用 `outputs/重启心流服务.cmd`。仅绑定本机回环地址，不直接发布公网。
 
 `outputs/电商生产台.html` 为离线前端，出片必须通过网站访问 API。
@@ -27,11 +25,21 @@ Windows 可双击 `outputs/启动网站.cmd`；升级后重启使用 `outputs/�
 
 ## 供应商接入
 
-仅使用[SilvaMux](./backend/PROVIDERS.md)。Key、URL、模型与估价在后端backend/silvamux.private.cjs，仅在本地和服务器私有目录保存，Git/Docker忽略，仅后端读取，不进入前端；修改后重启服务。
+支持 [Yunxin / SilvaMux 独立provider](./backend/PROVIDERS.md)，可按文本、图片理解、视频分别选择；本机先使用Yunxin，凭据只保存在被忽略的`.env.yunxin.local`。
 
-文本与图片/视频理解使用doubao-seed-2-1-pro-260628，视频生成使用Seedance 2.0。2026-11-25仅执行一次4秒苹果片真实视频理解，结果成功；此前4秒无声生成也已实测。其他输入/有声模式不能视为全部验证。
+已增加 [SilvaMux / Seedance 2.0 适配](./backend/SILVAMUX.md)，默认新建短片为4秒、480p、无声。当前账号视频权限仍待开通；未确认价格不会提交收费任务。
 
-客户知识→素材提炼→视频AI提炼，先授权素材、逐条报价及费用确认，候选存知识草稿；未配置估价拦截，截断或未知不自动重发。原历史任务和结果保留，已移除渠道不能借用当前Key重请求。
+- 文档：http://127.0.0.1:8767/api.html
+- OpenAPI：http://127.0.0.1:8767/api/openapi
+- 健康检查：http://127.0.0.1:8767/api/health
+
+流程：上传素材 → 保存任务 → 报价 → 明确授权 → 提交 → 查单 → 转存结果 → 人工审片。
+
+参考片可拆解、选镜头并建立独立改编草稿，支持8秒测试规格。真实参考视频需HTTPS输入；本地文件可按授权使用[临时私有OSS暂存工具](./backend/REFERENCE-STAGING.md)，目前由操作者手动执行。
+
+复制 `backend/provider.example.json` 为 `backend/provider.local.json`，按正式供应商文档配置模型 ID、创建/查单路径、能力、价格和返回字段。密钥放在 `backend/.env.local` 或环境变量，模板为 `backend/.env.example`。
+
+默认无自定义配置时使用内置 `ark-video` SilvaMux 适配；可用 `backend/provider.silvamux.example.json` 配置更详细的能力与报价。原 `xinliu-bridge` 是本系统的适配契约，不是 Seedance 官方接口。未配置、报价未知或动作迁移能力不足时不调用模型。超时保持未知，不自动重发。
 
 ## 构建与验证
 

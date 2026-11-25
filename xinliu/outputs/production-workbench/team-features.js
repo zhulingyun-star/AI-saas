@@ -206,7 +206,7 @@ function featureAfterRender() {
       main.querySelectorAll(':scope>.page-head').forEach((element, index) => { if (index > 0) element.classList.add('feature-inner-head'); });
       if (collabUi.teamTab === '团队费用') loadTeamExpenses();
     }
-    if (collabUi.teamTab === '出片API') document.querySelector('main>.card')?.insertAdjacentHTML('beforeend', `<div class="output-choice"><div><h3>视频理解（SilvaMux）</h3><p>使用服务端vision provider。Key不进入浏览器，local文件需供应商显式支持inline视频；未知价格不调用。</p></div>${button('检查服务端配置', 'generation-settings', 'sm')}</div>`);
+    if (collabUi.teamTab === '出片API') document.querySelector('main>.card')?.insertAdjacentHTML('beforeend', `<div class="output-choice"><div><h3>视频理解（Gemini协议）</h3><p>使用服务端vision provider。Key不进入浏览器，local文件需供应商显式支持inline视频；未知价格不调用。</p></div>${button('检查服务端配置', 'generation-settings', 'sm')}</div>`);
   }
   hydrateFiles();
 }
@@ -273,9 +273,9 @@ async function prepareVideoLearning() {
   const selected = client().assets.filter(asset => viewState.selectedAssets.has(asset.id) && asset.kind === '视频' && asset.mark && asset.markReason);
   if (!selected.length || selected.length > 5) { toast('请选择1–5条已评价视频'); return; }
   const config = await generationRequest('/api/config');
-  if (!config.providers.vision?.ready || !['gemini-content', 'openai-chat'].includes(config.providers.vision.protocol)) { toast('服务端视频理解未配置；规则整理仍可用，不伪装AI分析'); return; }
+  if (!config.providers.vision?.ready || config.providers.vision.protocol !== 'gemini-content') { toast('服务端Gemini协议vision provider未配置；规则整理仍可用，不伪装AI分析'); return; }
   featureUi.aiPlan = { clientId: state.activeClient, teamId: state.activeTeam, actorId: collabActor().id, selected: collabCopy(selected), records: [], provider: config.providers.vision };
-  openModal('视频理解：准备与费用', `<p class="small">选中${selected.length}条视频，最多5条逐条调用；先上传本地文件并准备估价，下一步再次确认才运行模型。</p><p class="meta mt">仅支持服务端明确允许的inline视频；不把blob链接传给模型，也不在浏览器保存API Key。</p><label class="row mt small"><input type="checkbox" class="checkbox" id="featureAnalysisRights"> 我确认这些视频的处理授权与客户范围</label><p id="featureAnalysisError" role="alert" class="guard-error"></p>${button('准备各条估价（不分析）', 'feature-ai-quotes', 'primary mt')}`, true);
+  openModal('视频理解：准备与费用', `<p class="small">选中${selected.length}条视频，最多5条逐条调用；先上传本地文件并准备估价，下一步再次确认才运行Gemini。</p><p class="meta mt">仅支持服务端明确允许的inline视频；不把blob链接传给模型，也不在浏览器保存API Key。</p><label class="row mt small"><input type="checkbox" class="checkbox" id="featureAnalysisRights"> 我确认这些视频的处理授权与客户范围</label><p id="featureAnalysisError" role="alert" class="guard-error"></p>${button('准备各条估价（不分析）', 'feature-ai-quotes', 'primary mt')}`, true);
 }
 async function videoLearningQuotes() {
   const plan = featureUi.aiPlan;
@@ -312,7 +312,7 @@ async function runVideoLearning() {
       record.task = result;
       if (result.status !== 'succeeded' || !result.output?.text) { featureUi.stop = true; toast('调用未确认成功，停止后续；请在后端任务核对，不自动重试'); break; }
       const destination = state.clients[plan.clientId];
-      destination.knowledge.unshift({ id: uniqueId('knowledge'), title: record.asset.name + ' · 视频分析候选', content: result.output.text.slice(0, 14000), category: record.asset.category || '全部品类', status: '草稿', version: 1, versions: [], owner: collabName(plan.actorId), scope: '当前客户', source: '服务端视频理解，候选需人工核对', sourceAssetIds: [record.asset.id], backendTaskId: result.id, teamId: plan.teamId, created: new Date().toISOString() });
+      destination.knowledge.unshift({ id: uniqueId('knowledge'), title: record.asset.name + ' · 视频分析候选', content: result.output.text.slice(0, 14000), category: record.asset.category || '全部品类', status: '草稿', version: 1, versions: [], owner: collabName(plan.actorId), scope: '当前客户', source: '服务端Gemini视频理解，候选需人工核对', sourceAssetIds: [record.asset.id], backendTaskId: result.id, teamId: plan.teamId, created: new Date().toISOString() });
       persist();
     }
     closeModal(); featureUi.knowledgeTab = '已保存知识'; flowUi.knowledgeTab = '经验与规则'; guardUi.libraryFilter = '全部状态'; render(); toast(featureUi.stop ? '后续分析已停止；成功候选保存为草稿，未确认任务请在素材提炼的后端任务中核对' : '已成功返回的候选保存为草稿，核对发布后再复用');
