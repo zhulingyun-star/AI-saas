@@ -2,7 +2,7 @@
 
 来源流程参考（只读）：`G:/manjupingtai/mj_system/manjupingtai2/backend/app/services/ad_identify.py`、`backend/app/prompts/zh/ad_prompt.py`、`frontend/src/components/ad/IdentifyPanel.tsx`、`IdentifyEditor.tsx`。
 
-本项目以 Java / React 实现核心流程：整组带编号图片 + 商品说明 → 外观/细节/用法/证据/受众与广告建议 → 后台保存 → 人工编辑。使用现有 AI_MODE / AI_BASE_URL / AI_API_KEY / AI_MODEL；不复制来源项目凭据。
+本项目以 Java / React 实现核光影云程：整组带编号图片 + 商品说明 → 外观/细节/用法/证据/受众与广告建议 → 后台保存 → 人工编辑。使用现有 AI_MODE / AI_BASE_URL / AI_API_KEY / AI_MODEL；不复制来源项目凭据。
 
 - 当前输入：最多 30 张商品图片，FFmpeg 生成长边 1024 的 JPEG 副本后内联发送；不修改原图。视频和音频不送入本版分析，界面明确提示。
 - 信息分层：图片可见事实、用户说明、待验证主张、创意建议。功能功效不能凭图片认定。

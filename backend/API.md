@@ -70,7 +70,7 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 
 当前素材 ID 是投放系统导出的业务 ID，以字符串存储，不自动认定为作业 ID。自动关联与千川授权为待实现项。CTR=Σclicks/Σimpressions；CPA=Σspend/Σorders；ROAS=Σrevenue/Σspend。
 
-## 心流交互升级（V2）
+## 光影云交互升级（V2）
 
 原 `/projects` 保留为单条作品 API；新增 `/campaigns` 表示交付项目。已有作品通过 Flyway V2 自动建立 `work_flow` 行，不清空数据。
 

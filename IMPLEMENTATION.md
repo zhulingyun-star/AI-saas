@@ -50,7 +50,7 @@
 
 本地粗剪、参考改编和草稿编导不能替代真实广告内容审核。所有生成稿与商品承诺仍由内容团队确认。
 
-## 2026-11-11：React / Java 版本按心流交互升级
+## 2026-11-11：React / Java 版本按光影云交互升级
 
 本轮直接改造 `fronted/` 和 `backend/`，没有将 `xinliu/` 的原生 JS 或 Node 后端替换进来。Docker 仍构建原 React + Java 17 / Spring AI 服务。
 

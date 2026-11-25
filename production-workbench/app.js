@@ -34,7 +34,7 @@ const button = (label, action, style = '', attributes = '') => `<button class="b
 const badge = (label, style = '') => `<span class="badge ${style}">${escapeText(label)}</span>`;
 const headline = (title, subtitle, controls = '') => `<div class="page-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="row wrap gap8">${controls}</div></div>`;
 const emptyState = (title, description, controls = '') => `<div class="card empty">${icon('folder')}<h2>${title}</h2><p>${description}</p><div class="row wrap gap8">${controls}</div></div>`;
-const titleMarkup = () => `<a href="#home" class="brandmark">${icon('film')}<span>商帧<small>电商内容生产</small></span></a>`;
+const titleMarkup = () => `<a href="#home" class="brandmark">${icon('film')}<span>光影云<small>电商内容生产</small></span></a>`;
 
 const categories = {
   '服饰鞋包': { formats: ['真人口播', '上身试穿', '场景穿搭', '细节演示', '多款混剪', '直播切片', '参考片改编', '剧情种草', '商品转台'], claims: ['版型', '上身效果', '面料细节', '搭配场景', '尺码与体型'], evidence: ['正侧背展示', '面料近景', '活动动作', '真实试穿素材'], style: '上身试穿', model: 'lin', product: 'coat' },

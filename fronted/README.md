@@ -1,4 +1,4 @@
-# 心流 React 前端
+# 光影云 React 前端
 
 本目录是原有 React 全栈版本按 `xinliu/` 新交互改造后的应用，使用 Java 17 / Spring AI 后端。参考实现 `xinliu/` 保持独立。
 
