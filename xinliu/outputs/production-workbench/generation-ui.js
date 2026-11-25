@@ -3,6 +3,8 @@
 const generationUi = { csrf: '', busy: false, status: null, taskId: '', taskClientId: '', sourceWorkId: '', kind: 'video', pending: null };
 async function generationRequest(route, body = null) {
   if (location.protocol === 'file:') throw new Error('离线文件只用于页面体验；出片接口请用本地网站 http://127.0.0.1:8767/');
+  if (authState.required && !authState.authenticated) throw new Error('请先登录管理员账号');
+  if (authState.required) generationUi.csrf = authState.csrf;
   if (!generationUi.csrf) {
     const response = await fetch('/api/session', { method: 'POST', headers: { 'X-Xinliu-Local': '1' }, credentials: 'same-origin' });
     const data = await response.json();
@@ -48,7 +50,7 @@ function generationAfterRender() {
   }
 }
 function generationSettingsMarkup() {
-  return `<section class="card pad"><div class="flow-section-head"><h3>光影云出片API</h3>${button('检查接口状态', 'generation-settings', 'sm')}</div><p class="small">本地地址 <code>/api/health</code>；生成路径 <code>/api/tasks</code> → <code>/quote</code> → <code>/submit</code> → <code>/refresh</code> → <code>/result</code></p><p class="mt"><a class="link" href="/api.html" target="_blank" rel="noopener">接口文档与OpenAPI</a></p><div class="generation-endpoints mt"><div><strong>视觉识别</strong><span>独立供应商与报价，候选事实需核对</span></div><div><strong>编导模型</strong><span>独立Prompt，不自动进入视频生成</span></div><div><strong>视频 / 动作迁移</strong><span>按能力声明、时长、画幅和报价拦截</span></div></div><p class="meta mt">配置在服务器 <code>backend/provider.local.json</code>；密钥通过环境变量读取，不在浏览器录入。Yunxin与SilvaMux独立配置，可分别选择文本、图片理解和视频供应商。短片试运行仅开放480p。</p><details class="workspace-details"><summary>联调能力与安全边界</summary><p class="small mt">当前是回环地址、单操作者测试服务，具备文件与任务落盘、幂等提交、超时未知保护、结果转存和视频Range读取。不是生产团队登录、多租户隔离或实际费用结算。</p><p class="small mt">视频生成的参考文件仍需授权公网HTTPS URL；视频理解仅在Gemini协议供应商显式支持时使用本地文件inline数据。图片仅在供应商支持时使用data URI。不会自动暴露本机文件或跨客户传素材。</p></details></section>`;
+  return `<section class="card pad"><div class="flow-section-head"><h3>光影云出片API</h3>${button('检查接口状态', 'generation-settings', 'sm')}</div><p class="small">本地地址 <code>/api/health</code>；生成路径 <code>/api/tasks</code> → <code>/quote</code> → <code>/submit</code> → <code>/refresh</code> → <code>/result</code></p><p class="mt"><a class="link" href="/api.html" target="_blank" rel="noopener">接口文档与OpenAPI</a></p><div class="generation-endpoints mt"><div><strong>视觉识别</strong><span>独立供应商与报价，候选事实需核对</span></div><div><strong>编导模型</strong><span>独立Prompt，不自动进入视频生成</span></div><div><strong>视频 / 动作迁移</strong><span>按能力声明、时长、画幅和报价拦截</span></div></div><p class="meta mt">仅使用SilvaMux；URL和模型内置，Key由后端 <code>silvamux.private.cjs</code> 读取，仅供后端读取，不进入前端。短片试运行仅开放480p。</p><details class="workspace-details"><summary>联调能力与安全边界</summary><p class="small mt">当前是回环地址、单操作者测试服务，具备文件与任务落盘、幂等提交、超时未知保护、结果转存和视频Range读取。不是生产团队登录、多租户隔离或实际费用结算。</p><p class="small mt">视频生成的参考文件仍需授权公网HTTPS URL；视频理解使用服务端上传文件的video_url数据。图片仅在供应商支持时使用data URI。不会自动暴露本机文件或跨客户传素材。</p></details></section>`;
 }
 async function generationSettings() {
   openModal('出片接口状态', '<p class="meta">正在检查本地API，不调用模型</p>');

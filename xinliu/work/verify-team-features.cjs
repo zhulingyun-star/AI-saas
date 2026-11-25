@@ -1,7 +1,7 @@
 'use strict';
 
 const { chromium, executablePath, BASE_URL } = require('./browser-runtime.cjs');
-const { geminiPayload } = require('../backend/yunxin.cjs');
+const { geminiPayload } = require('../backend/model-protocols.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 

@@ -12,7 +12,7 @@ async function main() {
     const failedResponses = [];
     const health = await fetch(BASE_URL + '/api/health');
     assert.equal(health.status, 200);
-    assert.equal((await health.json()).name, '心流');
+    assert.equal((await health.json()).name, '光影云');
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => {
       if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);

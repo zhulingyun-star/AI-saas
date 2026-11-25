@@ -1,5 +1,6 @@
 'use strict';
 
+const authState = { required: false, authenticated: false, csrf: '', checking: true };
 const STORE_KEY = 'commerce-production-v3';
 const app = document.getElementById('app');
 const overlay = document.getElementById('overlay');
@@ -130,7 +131,7 @@ async function keepFile(file, scope = state.activeClient) {
   fileUrls[fileId] = URL.createObjectURL(file);
   return fileId;
 }
-async function readFile(fileId) {
+async function readLocalFile(fileId) {
   const database = await mediaDatabase;
   if (!database || !fileId) return null;
   return new Promise(resolve => {
@@ -138,6 +139,13 @@ async function readFile(fileId) {
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = () => resolve(null);
   });
+}
+async function readFile(fileId) {
+  const local = await readLocalFile(fileId);
+  if (local || !authState.required || !authState.authenticated || !fileId) return local;
+  const response = await fetch('/api/workspace-import/files?fileId=' + encodeURIComponent(fileId), { credentials: 'same-origin' });
+  if (response.status === 401) { authExpired(); return null; }
+  return response.ok ? response.blob() : null;
 }
 async function fileUrl(fileId) {
   if (fileUrls[fileId]) return fileUrls[fileId];
@@ -197,6 +205,63 @@ function statsMarkup(items) {
 }
 function loginPage() {
   return `<div class="login-page ui-login"><section class="login-story">${titleMarkup()}<div class="ui-login-preview"><div class="story-preview"><img src="media/fashion.jpg" alt="服饰穿搭界面示例，非模型生成"><span>穿搭素材 · 示例</span></div></div><span class="small-print">示例人像仅用于界面；非模型生成</span></section><section class="login-content"><form id="loginForm"><h1>进入工作空间</h1><div class="ui-login-status">本地体验 · 不发送登录信息</div><label class="field mt"><span>工作邮箱</span><input class="input" name="email" type="email" required placeholder="name@company.com"></label><label class="field"><span>演示密码</span><input class="input" type="password" name="password" minlength="6" required placeholder="不用填写真实密码"></label><button class="btn primary full" type="submit">登录工作台</button><div class="divider"></div>${button('直接体验', 'enter', 'full')}<details class="ui-context-disclosure mt"><summary>本地资料保存范围</summary><div class="ui-context-body">页面资料与媒体保存在当前浏览器，后端任务另行保存；不支持生产多人登录。</div></details></form></section></div>`;
+}
+function adminLoginPage() {
+  return `<div class="login-page ui-login"><section class="login-story">${titleMarkup()}<div class="ui-login-preview"><div class="story-preview"><img src="media/fashion.jpg" alt="服饰穿搭界面示例，非模型生成"><span>穿搭素材 · 示例</span></div></div></section><section class="login-content"><form id="loginForm"><h1>管理员登录</h1><label class="field mt"><span>账号</span><input class="input" name="username" autocomplete="username" required value="admin" maxlength="100"></label><label class="field"><span>密码</span><input class="input" type="password" name="password" autocomplete="current-password" required maxlength="1024"></label><p id="loginError" role="alert" class="notice warn" hidden></p><button class="btn primary full" type="submit" ${authState.checking ? 'disabled' : ''}>${authState.checking ? '正在检查登录状态…' : '登录工作台'}</button></form></section></div>`;
+}
+function authExpired(message = '') {
+  authState.authenticated = false;
+  authState.csrf = '';
+  generationUi.csrf = '';
+  closeModal();
+  render();
+  const error = document.getElementById('loginError');
+  if (error && message) { error.textContent = message; error.hidden = false; }
+}
+async function restoreServerWorkspace() {
+  const response = await fetch('/api/workspace-import', { credentials: 'same-origin', cache: 'no-store' });
+  if (response.status === 404) return;
+  if (!response.ok) throw new Error('云端项目读取失败，请刷新重试');
+  const data = await response.json();
+  if (data.import && mergeWorkspaceImport(state, data.import, freshClient)) persist();
+}
+async function authRestore() {
+  try {
+    if (location.protocol === 'file:') throw new Error('管理员登录请通过本地网站 http://127.0.0.1:8767/ 打开');
+    const response = await fetch('/api/session', { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('无法检查登录状态，请确认后端服务已启动');
+    const data = await response.json();
+    authState.required = data.required === true;
+    authState.authenticated = data.authenticated === true;
+    authState.csrf = data.csrf || '';
+    if (authState.required && authState.authenticated) await restoreServerWorkspace();
+    authState.checking = false;
+    if (!authState.authenticated) closeModal();
+    render();
+  } catch (error) { authState.checking = false; authExpired(error.message); }
+}
+async function authLogin(form) {
+  const submit = form.querySelector('[type="submit"]');
+  const errorBox = form.querySelector('#loginError');
+  submit.disabled = true; submit.textContent = '正在登录…'; errorBox.hidden = true;
+  try {
+    if (location.protocol === 'file:') throw new Error('管理员登录请通过本地网站 http://127.0.0.1:8767/ 打开');
+    const response = await fetch('/api/session', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: form.elements.username.value.trim(), password: form.elements.password.value }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || '登录失败，请重试');
+    authState.authenticated = true; authState.csrf = data.csrf;
+    await restoreServerWorkspace();
+    form.reset();
+    if (location.hash === '#login') navigate('projects'); else render();
+  } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; form.elements.password.value = ''; form.elements.password.focus(); }
+  finally { submit.disabled = false; submit.textContent = '登录工作台'; }
+}
+async function authLogout() {
+  try {
+    const response = await fetch('/api/session', { method: 'DELETE', credentials: 'same-origin', headers: { 'X-Xinliu-CSRF': authState.csrf } });
+    if (!response.ok && response.status !== 401) throw new Error('退出失败，请重试');
+    authExpired(); navigate('login');
+  } catch (error) { toast(error.message); }
 }
 function homePage() {
   const current = client();
@@ -413,6 +478,8 @@ function compilePrompt(config=state.config,shots=getShots()) {
   return XinliuStrategies.compile({ config, shots, product: productCatalog.find(item=>item.id===config.productId)||client().assets.find(item=>item.id===config.productId), model, look:look?{...look,name:look.name+' / '+garmentNames}:null, voice }).videoPrompt;
 }
 function render() {
+  if (authState.checking) { app.innerHTML = '<p class="pad">正在连接服务…</p>'; return; }
+  if (authState.required && !authState.authenticated) { app.innerHTML = adminLoginPage(); const form = document.getElementById('loginForm'); form.onsubmit = event => { event.preventDefault(); authLogin(form); }; return; }
   stopPreview();
   collabState();
   XLTeam.initialize();
@@ -718,8 +785,8 @@ document.addEventListener('click',event=>{
   switch(action){
     case 'nav': navigate(target.dataset.view); break;
     case 'close-modal': closeModal(); break;
-    case 'enter': state.signedIn=true;persist();navigate('home');break;
-    case 'logout': navigate('login');break;
+    case 'enter': if (!authState.required) { state.signedIn=true;persist();navigate('home'); } break;
+    case 'logout': if (authState.required) authLogout(); else navigate('login');break;
     case 'load-demo': loadDemo();break;
     case 'new-project': openProjectForm();break;
     case 'open-project': {const project=current.projects.find(item=>item.id===id);state.config={...defaultConfig(),...project.config,draftId:project.id};viewState.stage=2;persist();navigate('studio');break;}
@@ -1053,4 +1120,4 @@ async function exportLocalPreview() {
 
 window.addEventListener('hashchange',()=>{closeModal();render();window.scrollTo(0,0);});
 if('speechSynthesis' in window)speechSynthesis.onvoiceschanged=()=>{const status=document.getElementById('voiceSystemInfo');if(status)status.textContent=`系统可用 ${speechSynthesis.getVoices().length} 个声音；上传客户录音可以保留真实音色`;};
-render();
+authRestore();

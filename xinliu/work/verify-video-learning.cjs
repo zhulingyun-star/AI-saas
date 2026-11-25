@@ -16,15 +16,15 @@ async function main() {
     let body = '';
     for await (const chunk of request) body += chunk;
     const payload = JSON.parse(body);
-    assert.equal(payload.contents[0].parts[1].inline_data.mime_type, 'video/webm');
-    assert.match(payload.contents[0].parts[0].text, /商品包装字样/);
+    assert.match(payload.messages[1].content[1].video_url.url, /^data:video\/webm;base64,/);
+    assert.match(payload.messages[1].content[0].text, /商品包装字样/);
     calls++;
-    response.end(JSON.stringify({ candidates: [{ finishReason: partial ? 'MAX_TOKENS' : 'STOP', content: { parts: [{ text: JSON.stringify({ hook: '真实可见开场', shots: [], uncertain: ['无法确认功效'] }) }] } }] }));
+    response.end(JSON.stringify({ choices: [{ finish_reason: partial ? 'length' : 'stop', message: { content: JSON.stringify({ hook: '真实可见开场', shots: [], uncertain: ['无法确认功效'] }) } }] }));
   });
   await new Promise(resolve => fixture.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${fixture.address().port}`;
   process.env.XINLIU_LEARNING_FIXTURE_KEY = 'mock-not-a-real-key';
-  const provider = { protocol: 'gemini-content', baseUrl: origin, createPath: '/generate', keyEnv: 'XINLIU_LEARNING_FIXTURE_KEY', model: 'fixture-video-understanding', supportsVideoDataUri: true, maxInlineVideoBytes: 16 * 1024 * 1024, price: { fixedCredits: 2 } };
+  const provider = { protocol: 'openai-chat', baseUrl: origin, createPath: '/generate', keyEnv: 'XINLIU_LEARNING_FIXTURE_KEY', model: 'fixture-video-understanding', supportsVideoDataUri: true, maxInlineVideoBytes: 16 * 1024 * 1024, price: { fixedCredits: 2 } };
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xinliu-learning-test-'));
   const backend = createBackend({ port: 0, dataDir, providers: { vision: provider }, allowFixture: true });
   let browser;
@@ -92,7 +92,7 @@ async function main() {
     assert.equal(large.data.error.code, 'VIDEO_ANALYSIS_TOO_LARGE');
     assert.equal(calls, 2);
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ status: 'passed', fixtureCalls: calls, checks: ['真实本地文件上传并转inline视频', '授权与逐条估价之前零模型调用', '未授权拦截', '已提交任务不重发', '候选只保存知识草稿', '不完整响应保留unknown并停止后续', '未声明inline能力与超限文件在报价阶段拦截'], pageErrors: errors, authority: '本地HTTP假供应商，不验证Gemini模型质量、不消耗真实积分' }));
+    console.log(JSON.stringify({ status: 'passed', fixtureCalls: calls, checks: ['真实本地文件上传并转inline视频', '授权与逐条估价之前零模型调用', '未授权拦截', '已提交任务不重发', '候选只保存知识草稿', '不完整响应保留unknown并停止后续', '未声明inline能力与超限文件在报价阶段拦截'], pageErrors: errors, authority: '本地HTTP假供应商，不验证模型质量、不消耗真实积分' }));
   } finally {
     if (browser) await browser.close();
     await backend.close();

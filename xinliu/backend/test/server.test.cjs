@@ -91,7 +91,7 @@ test('本地API：独立素材、显式报价授权、幂等提交、查单、�
     assert.equal((await fetch(origin + '/api/session', { method: 'POST', headers: { 'X-Xinliu-Local': '1', Origin: 'https://attacker.example' } })).status, 403);
     await bootstrap();
     assert.equal((await fetch(origin + '/api/tasks', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
-    const health = await request('/api/health'); assert.equal(health.body.name, '心流');
+    const health = await request('/api/health'); assert.equal(health.body.name, '光影云');
     assert.equal((await request('/api/openapi')).body.openapi, '3.1.0');
     assert.equal((await request('/api/assets', { clientId: 'a', name: '内网链接', type: 'video/mp4', url: 'http://192.168.1.2/video.mp4' })).body.error.code, 'UNSAFE_URL');
     const compiled = await request('/api/prompts/compile', input()); assert.equal(compiled.status, 200);

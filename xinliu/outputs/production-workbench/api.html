@@ -34,13 +34,11 @@ small{color:#87919b}@media(max-width:700px){main{margin:0;padding:20px}table{fon
 <tr><td>GET /api/tasks/{id}/result</td><td>已转存真实视频，支持Range</td><td>否</td></tr>
 </tbody></table></div>
 <h2>视频理解与知识提炼</h2>
-<p>客户知识 → 素材提炼 → 选择1–5条已评价视频 → 核对处理授权 → 准备各条估价 → 确认本次费用 → 逐条分析。结果保存为知识草稿，核对发布、明确选用版本后才能用于新方案。</p>
-<p>复用任务接口，设置kind为vision、input.config.videoAnalysis=true、assets职责为reference_video。供应商必须为gemini-content且显式支持supportsVideoDataUri。本地视频上传后由服务端转inline_data，硬上限16MB，可设置更低上限。不把blob链接或任意网址当作Gemini fileUri。</p>
-<p>Yunxin通过YUNXIN_VIDEO_ANALYSIS_INLINE=true显式开放能力，默认false。密钥只在服务器；估价未知、能力未配置、文件缺失或超限均拦截。截断和空答案保留不确定状态，不自动采用或重发。</p>
+<p>客户知识 → 素材提炼 → 选择1–5条已评价视频 → 核对授权 → 准备逐条估价 → 确认费用 → 分析。候选保存为知识草稿，不直接变成商品事实。</p>
+<p>kind为vision，config.videoAnalysis=true，素材职责reference_video。SilvaMux支持16MB内已上传本地视频，通过video_url的data URI发送，已用4秒苹果片实测成功。截断/空答/未知不自动重试。</p>
 <h2>供应商配置</h2>
-<p>Yunxin与SilvaMux分别配置文本、图片理解和视频。使用XINLIU_TEXT_PROVIDER / XINLIU_VISION_PROVIDER / XINLIU_VIDEO_PROVIDER选择渠道。配置和限制见仓库backend/PROVIDERS.md、backend/SILVAMUX.md。</p>
-<p>沿用backend/.env.local和backend/.env.yunxin.local或启动环境变量；凭据不进浏览器。自定义backend/provider.local.json优先于环境配置，需提供独立keyEnv、真实URL、模型ID、能力声明与报价。</p>
-<p><strong>xinliu-bridge是本系统的适配契约，不是Seedance官方接口。</strong>供应商结构不同时需要字段映射或专用适配器，不能直接请求示例路径。</p>
+<p>仅使用SilvaMux。URL和模型在backend/silvamux.cjs内置。Key与业务估价在backend/silvamux.private.cjs，该文件仅在本地和服务器私有目录保存，Git/Docker忽略，仅后端读取，不进入前端/日志/任务。模型配置不再从环境变量或旧provider文件读取。</p>
+<p>文本与图片/视频理解使用/api/v1/chat/completions，视频生成使用Ark任务接口。未知估价仍拦截，不将token数当作金额。</p>
 <pre>{
   "model": "真实模型ID",
   "client_task_id": "系统任务ID",
