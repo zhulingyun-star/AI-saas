@@ -39,9 +39,20 @@ export default function ProductReview() {
       setBrief(a.brief ?? '');
     }
   }, [a, report]);
+  // 有存过的核对记录就用记录；第一次核对默认勾上已验证的（看得到的卖点、卖点文案、用户痛点），待验证的不勾
   useEffect(() => {
-    if (product?.info && confirmed === null) setConfirmed(new Set(product.info.confirmed));
-  }, [product, confirmed]);
+    if (!product?.info || confirmed !== null || !report) return;
+    const saved = product.info.confirmed ?? [];
+    if (saved.length || product.info.reviewed) return setConfirmed(new Set(saved));
+    const points = report.provable_points ?? [];
+    setConfirmed(
+      new Set([
+        ...points.filter((x) => !isUnverified(x.evidence)).map((x) => `provable|${x.claim}`),
+        ...(report.pitch_lines ?? []).map((t) => `pitch|${t}`),
+        ...(report.pain_points ?? []).map((t) => `pain|${t}`),
+      ]),
+    );
+  }, [product, confirmed, report]);
 
   const back = (
     <button type="button" className="gy-backlink" onClick={() => navigate(`/products/${anchor}`)}>
@@ -252,8 +263,8 @@ export default function ProductReview() {
               </div>
               <div className="uses">
                 {uses
-                  ? `这张图是 ${uses} 条卖点的依据。点卖点旁边的小图，可以切到对应图片。`
-                  : '没有卖点用这张图做依据。'}
+                  ? `这张图是 ${uses} 条卖点的依据`
+                  : '没有卖点用这张图做依据'}
               </div>
             </>
           ) : (
@@ -350,7 +361,7 @@ export default function ProductReview() {
             {head(
               'rv-d',
               '不能夸大的说法',
-              `${(report.exaggeration_risks ?? []).length} 条，做视频时会避开`,
+              `${(report.exaggeration_risks ?? []).length} 条`,
             )}
             {(report.exaggeration_risks ?? []).map((x, i) => (
               <div className="gy-warnbox" key={i}>
@@ -360,7 +371,7 @@ export default function ProductReview() {
             ))}
           </Card>
           <Card className="gy-rsec">
-            {head('rv-e', '需要补充的信息', `还差 ${missing} 项，问客户或看详情页`)}
+            {head('rv-e', '需要补充的信息', `还差 ${missing} 项`)}
             {(report.confirm ?? []).map((t, i) =>
               filling === i ? (
                 <AddLine
@@ -393,7 +404,6 @@ export default function ProductReview() {
               ),
             )}
             {!(report.confirm ?? []).length && <span className="gy-muted">没有要补充的信息</span>}
-            {dirty && <span className="gy-fine">补充的内容会随核对一起保存在分析结果里。</span>}
           </Card>
           <Card className="gy-rsec">
             {head('rv-f', '人群与广告类型', '')}
@@ -415,21 +425,27 @@ export default function ProductReview() {
       {error && <Notice tone="error">{error}</Notice>}
       <Card className="gy-actbar">
         <span className="gy-muted">
-          {left ? (
+          {left || missing ? (
             <>
-              还有 <b>{left} 条</b>没确认
+              {left ? (
+                <>
+                  还有 <b>{left} 条</b>待你看一眼
+                </>
+              ) : (
+                '都看过了'
+              )}
+              {missing ? ` · ${missing} 项信息待补充` : ''}。看不完可以先存草稿。
             </>
           ) : (
-            '都确认了'
+            '都看过了。'
           )}
-          {missing ? `，需要补充 ${missing} 项信息` : ''}。没确认完可以先存为草稿，之后接着核对。
         </span>
         <div className="gy-row">
           <Btn busy={busy} onClick={() => void save(false)}>
             保存为草稿
           </Btn>
           <Btn variant="primary" busy={busy} onClick={() => void save(true)}>
-            确认并保存商品
+            确认用于视频
           </Btn>
         </div>
       </Card>

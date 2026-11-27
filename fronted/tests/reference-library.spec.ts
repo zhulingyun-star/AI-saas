@@ -294,7 +294,7 @@ test('upload shows 拆解中, then the finished storyboard opens in detail', asy
   await page.goto('/references');
   await page.getByRole('button', { name: '上传参考视频' }).first().click();
   const dialog = page.getByRole('dialog', { name: '上传参考视频' });
-  await expect(dialog).toContainText('上传后自动拆解镜头、台词和结构');
+  await expect(dialog).toContainText('只学结构和节奏，不放进成片');
   await expect(dialog).not.toContainText(/费用|价格/);
   await dialog
     .getByLabel('选择参考视频文件')
@@ -356,7 +356,7 @@ test('detail: tabs, hook type and per-shot tasks, rename, delete and new project
   await expect(page.getByText('出门不想化妆')).toBeVisible();
   await page.getByRole('tab', { name: '结构总结' }).click();
   await expect(page.getByText('痛点开场 → 亮出产品 → 质感展示 → 上脸效果')).toBeVisible();
-  await expect(page.getByText(/^每镜任务还没标，/)).toBeVisible();
+  await expect(page.getByText('每镜任务还没标。', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '标开头和每镜任务' }).click();
   await expect(page.getByRole('tab', { name: '镜头拆解' })).toHaveAttribute(

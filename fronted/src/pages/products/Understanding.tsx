@@ -33,15 +33,7 @@ function useUnderstanding(anchor: string) {
 }
 
 const sourceText = (u: Understanding) =>
-  u.source === 'EMPTY'
-    ? '还没有商品分析'
-    : !u.saved
-      ? '来源：商品分析自动整理 · 还没保存，改任何一处就会保存'
-      : u.source === 'AI'
-        ? '来源：AI 根据商品分析重新提取'
-        : u.source === 'DERIVED'
-          ? '来源：根据商品分析重新整理'
-          : `来源：商品分析 + 人工修改${u.editedCount ? ` · 人工改过 ${u.editedCount} 次` : ''}`;
+  u.source === 'EMPTY' ? '还没有商品分析' : u.saved ? '' : '自动整理自商品分析';
 
 /** 「商品理解」卡：六类标签，点标签改字、× 删除、最后一格回车添加。 */
 export function UnderstandingCard({ anchor }: { anchor: string }) {
@@ -100,7 +92,7 @@ export function UnderstandingCard({ anchor }: { anchor: string }) {
   return (
     <Card pad className="gy-ukcard" role="region" aria-label="商品理解">
       <CardHead title="商品理解">
-        <small>{sourceText(u)}</small>
+        {sourceText(u) && <small>{sourceText(u)}</small>}
         <Btn
           size="xs"
           disabled={!u.hasAnalysis || busy}
@@ -111,12 +103,9 @@ export function UnderstandingCard({ anchor }: { anchor: string }) {
           {extracting ? '正在重新提取…' : u.aiEnabled ? '让 AI 重新提取' : '按分析重新整理'}
         </Btn>
       </CardHead>
-      <span className="gy-fine">
-        做视频时，开头钩子、每个镜头的任务都按这里来写。点标签可以改字，×
-        删掉，最后一格输入后回车添加。资料里没有的价格、功效数据不会写进来。
-      </span>
+      <span className="gy-fine">开头钩子和镜头任务按这里写。点标签改字，回车添加。</span>
       {!u.hasAnalysis && (
-        <Notice>这个商品还没有分析结果。分析完成后会自动整理在这里，现在也可以手动添加。</Notice>
+        <Notice>还没有商品分析，可以手动添加。</Notice>
       )}
       {error && <Notice tone="error">{error}</Notice>}
       <div className={`gy-ukgrid${extracting ? ' busy' : ''}`}>
@@ -414,12 +403,10 @@ export function PersonasCard({ anchor }: { anchor: string }) {
           新增人群
         </Btn>
       </CardHead>
-      <span className="gy-fine">
-        人群挂在这个商品上，用这个商品的所有项目共用。做视频时「给谁看」就从这里选；改了这里，之后新选的方向都会用新的。
-      </span>
+      <span className="gy-fine">人群由这个商品的所有项目共用。</span>
       {!u.personasSaved && list.length > 0 && (
         <Notice
-          title="下面是根据商品分析整理的建议人群，还没保存"
+          title="建议人群，未保存"
           actions={
             <Btn
               size="xs"
@@ -432,9 +419,7 @@ export function PersonasCard({ anchor }: { anchor: string }) {
               采用这些人群
             </Btn>
           }
-        >
-          采用后可以编辑和删除；直接新增人群也会一起采用。
-        </Notice>
+        />
       )}
       {error && <Notice tone="error">{error}</Notice>}
       {list.length || editing === 'new' ? (
@@ -518,7 +503,7 @@ export function PersonasCard({ anchor }: { anchor: string }) {
         </div>
       ) : (
         <div className="gy-muted" style={{ padding: '16px 0' }}>
-          还没有人群。点「新增人群」加一个。
+          还没有人群。
         </div>
       )}
     </Card>

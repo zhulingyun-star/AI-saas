@@ -49,7 +49,7 @@ const blankOneClick: OneClickSettings = {
   look: '',
 };
 
-/** 框架模式 / 一键成片的四步详情：商品 → 方向 → 分镜 → 出片（和视频二创同一套步骤条、顶部操作栏、右侧项目信息） */
+/** 框架模式 / 简易的四步详情：商品 → 方向 → 分镜 → 出片（和复刻同一套步骤条、顶部操作栏、右侧项目信息） */
 export default function ModeDetail({
   flow: f,
   apply,
@@ -136,7 +136,7 @@ export default function ModeDetail({
         [
           '方向',
           ocDir
-            ? `${ocDir.source === 'AI' ? 'AI' : '本地模板'}写了「${ocDir.data.title}」`
+            ? `「${ocDir.data.title}」${ocDir.source === 'AI' ? '' : ' · 模板'}`
             : '出片时自动写',
           ocDir ? 'done' : 'wait',
         ],
@@ -151,7 +151,7 @@ export default function ModeDetail({
             ? `第 ${running[0].no} 版出片中`
             : f.versions.length
               ? `${f.versions.length} 个版本`
-              : '填好设置就能出',
+              : '待出片',
           'now',
         ],
       ]
@@ -185,7 +185,7 @@ export default function ModeDetail({
               ? `${picked.length > 1 ? `${picked.length} 个方向 · ` : ''}${f.versions.length} 个版本`
               : confirmedBoards
                 ? '可以出第一版'
-                : '确认分镜后才能出片',
+                : '待确认分镜',
           running.length || (confirmedBoards && !f.versions.length)
             ? 'now'
             : f.versions.length
@@ -215,7 +215,6 @@ export default function ModeDetail({
           disabled={busy}
           onChange={(next) => void settings(next, `已改成 ${formatRR(next)}，只影响之后出的版本`)}
         />
-        <small className="gy-muted">改了只影响之后出的版本，已出的不变。</small>
       </div>
       <label className="gy-rrrail">
         <b>文件夹</b>
@@ -276,13 +275,13 @@ export default function ModeDetail({
         <b>现在要做</b>
         {oneClick
           ? f.versions.length
-            ? '审片：评好或差，差的原因下一版会带上'
-            : '填好设置，点顶部的「开始出片」'
+            ? '审片'
+            : '填设置，开始出片'
           : step === 2
-            ? '定好给谁看和时长，出方向、选方向'
+            ? '出方向、选方向'
             : step === 3
-              ? '逐镜核对分镜，确认后出片'
-              : '等出片，然后审片'}
+              ? '确认分镜'
+              : '等出片'}
       </div>
     </aside>
   );
@@ -297,12 +296,11 @@ export default function ModeDetail({
           </Btn>
         }
       >
-        这个项目用 <b>{f.product.name}</b>。可以换，换了以后
-        {oneClick ? '下次出片会重新写方向和分镜' : '分镜要重新确认，方向会标出是按旧商品写的'}。
+        这个项目用 <b>{f.product.name}</b>。
       </TopBar>
       <Card className="gy-pjs">
         <h3>
-          商品<small>一个项目只用一个商品 · 没有参考视频，按商品资料写方向</small>
+          商品<small>一个项目只用一个商品</small>
         </h3>
         <ProductButton
           name={f.product.name}
@@ -322,7 +320,7 @@ export default function ModeDetail({
     </>
   );
 
-  // ---------- 一键成片：方向（自动写的，可以看、可以改） ----------
+  // ---------- 简易：方向（自动写的，可以看、可以改） ----------
   const ocDirections = ocEdit ? (
     <>
       <TopBar
@@ -346,7 +344,7 @@ export default function ModeDetail({
                     ),
                   );
                   setOcEdit(null);
-                }, '方向已保存；分镜会提示按新方向重写')
+                }, '方向已保存')
               }
             >
               保存这个方向
@@ -354,7 +352,7 @@ export default function ModeDetail({
           </>
         }
       >
-        正在改自动写的方向。改完以后，分镜会提示按新方向重写；下次「再出一版」用改过的。
+        正在改方向。
       </TopBar>
       {ocDir && (
         <DirectionForm
@@ -391,20 +389,19 @@ export default function ModeDetail({
         }
       >
         {ocDir
-          ? `出片时自动写的方向（${sourceLabel(ocDir.source)}）。可以改，不用确认；设置不变时，下次「再出一版」沿用这里改过的。`
-          : '还没出过片：点「开始出片」时会按设置自动写一个方向。'}
+          ? `出片时自动写的方向${sourceLabel(ocDir.source) ? ` · ${sourceLabel(ocDir.source)}` : ''}。可以改，不用确认。`
+          : '还没出片。'}
       </TopBar>
       {ocDir ? (
         <Card className="gy-pjs">
           <h3>
-            这次用的方向<small>按出片时的设置写的 · 改了设置再出，会重新写一个</small>
+            这次用的方向
           </h3>
           <DirectionCard d={ocDir} ctx={ctx} busy={busy} />
         </Card>
       ) : (
         <Card className="gy-pjs gy-lockc">
           <b>还没有方向</b>
-          <span>出第一版时自动写</span>
         </Card>
       )}
     </>
@@ -421,7 +418,7 @@ export default function ModeDetail({
     hook: d.data.hook,
     personaName: d.data.personaName,
     notReady: {
-      msg: `${picked.length > 1 ? `${LETTERS[k]} ` : ''}「${d.data.title}」的分镜还没确认，确认以后才能出片。`,
+      msg: `${picked.length > 1 ? `${LETTERS[k]} ` : ''}「${d.data.title}」的分镜待确认。`,
       actions: (
         <Btn variant="primary" onClick={() => go(3, d.id)}>
           去确认分镜
@@ -449,16 +446,10 @@ export default function ModeDetail({
           <span className="gy-warntext">{ocBlocked}</span>
         ) : f.versions.length ? (
           <>
-            已出 {f.versions.length} 版。改了设置再点「再出一版」，每一版都会写明和上一版改了什么。
+            已出 {f.versions.length} 版。
           </>
         ) : (
-          <>
-            设置好就点「开始出片」：
-            {f.aiEnabled
-              ? 'AI 会按设置写方向和分镜，接着出片'
-              : '没配置文字模型，会按商品理解拼本地模板（不是 AI 写的），接着出片'}
-            。中间两步出完可以回头看、可以改。
-          </>
+          <>填好设置，开始出片。</>
         ),
         actions: (
           <>
@@ -480,7 +471,7 @@ export default function ModeDetail({
                   segments: [],
                   note: '',
                   basedOn: null,
-                  msg: `${fresh ? `按现在的设置${f.aiEnabled ? '让 AI ' : '用本地模板'}写方向和分镜，` : '设置没变，用现在的方向和分镜，'}出第 ${n} 版（${formatRR(f.settings)} · ${oc.duration} 秒）`,
+                  msg: `${fresh ? '按现在的设置重写方向和分镜，' : '用现在的方向和分镜，'}出第 ${n} 版（${formatRR(f.settings)} · ${oc.duration} 秒）`,
                   run: () =>
                     post<Version>(`/clients/${client.id}/projects/${id}/one-click/run`, {
                       revision: f.revision,
@@ -534,11 +525,10 @@ export default function ModeDetail({
             </Btn>
           }
         >
-          还没选方向，选好方向、确认分镜以后才能出片。
+          还没选方向。
         </TopBar>
         <Card className="gy-pjs gy-lockc">
           <b>还没出片</b>
-          <span>先在「方向」里选 1~3 个方向</span>
         </Card>
       </>
     );
@@ -565,7 +555,7 @@ export default function ModeDetail({
         <TopBar>
           {running.length
             ? `${running.length} 个方向正在出片。`
-            : `${picked.length} 个方向放在一起看；点某个方向进去审片、改了再出。`}
+            : `${picked.length} 个方向放在一起看。`}
         </TopBar>
         {tabs}
         <DirCompare flow={f} onOpen={setDir} />
@@ -633,12 +623,7 @@ export default function ModeDetail({
               folderPath(folders, p.folderId),
             ].join(' · ')}
           </p>
-          <p className="gy-fine">
-            {oneClick
-              ? '设置好以后一次出片：方向和分镜自动写，出完可以回头看、可以改'
-              : '方向由你从几套方向里选，可以选几个一起测'}{' '}
-            · 商品 → 方向 → 分镜 → 出片
-          </p>
+          <p className="gy-fine">商品 → 方向 → 分镜 → 出片</p>
         </div>
       </div>
       <nav className="gy-uni" aria-label="制作步骤">
@@ -660,7 +645,7 @@ export default function ModeDetail({
       {err && <Notice tone="error">{err}</Notice>}
       {!f.product.analysis.hasReport && (
         <Notice tone="warn" title="商品还没有分析结果">
-          广告用语检查只能查通用的说法；商品分析里「不能夸大的说法」要等分析完成才会一起查。
+          先只查通用的违规说法。
         </Notice>
       )}
       <div className="gy-pdgrid">
@@ -721,7 +706,7 @@ export default function ModeDetail({
   );
 }
 
-/** 一键成片的设置：出发点、时长、给谁看、创意要求 / 文案，更多设置里是出镜人物、台词和声音、节奏、片种 */
+/** 简易的设置：出发点、时长、给谁看、创意要求 / 文案，更多设置里是出镜人物、台词和声音、节奏、片种 */
 function OneClickSettingsCard({
   flow,
   value: o,
@@ -761,13 +746,11 @@ function OneClickSettingsCard({
     .filter((k) => o[k])
     .map((k) => o[k]);
   return (
-    <Card className="gy-pjs gy-ocset" aria-label="一键成片的设置">
+    <Card className="gy-pjs gy-ocset" aria-label="出片设置">
       <h3>
         出片设置
         <small>
-          {dirty
-            ? '改过了，还没保存 · 点「开始出片 / 再出一版」会一起保存'
-            : '每一版都会记下出片时的设置'}
+          {dirty ? '未保存' : ''}
         </small>
       </h3>
       <div className="gy-ocrow">
@@ -842,8 +825,8 @@ function OneClickSettingsCard({
           {o.src === 'copy'
             ? '台词按句子顺序放进各镜，一个字不改。'
             : flow.aiEnabled
-              ? '写方向、写分镜时都照这段来。'
-              : '没配置文字模型，本地模板读不了这段要求，只会记在这一版的设置里。'}{' '}
+              ? ''
+              : '没配置文字模型，这段只记在设置里。'}{' '}
           {text.length} / 500
         </span>
         {text.trim() &&
@@ -893,7 +876,7 @@ function DirCompare({ flow, onOpen }: { flow: ModeFlow; onOpen: (id: string) => 
     <Card className="gy-pjs">
       <h3>
         同一个商品，{picked.length} 个方向放在一起看
-        <small>每个方向最新的一版 · 审片、改了再出要进到那个方向里</small>
+        <small>每个方向最新的一版</small>
       </h3>
       <div
         className="gy-dcmp"
@@ -958,7 +941,7 @@ function DirCompare({ flow, onOpen }: { flow: ModeFlow; onOpen: (id: string) => 
                 </dd>
               </dl>
               <Btn size="xs" onClick={() => onOpen(d.id)}>
-                进去审片、改了再出
+                去审片
               </Btn>
             </div>
           );

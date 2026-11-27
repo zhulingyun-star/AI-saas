@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, CircleAlert, FileText, Film, Sparkles, Users } from 'lucide-react';
+import { ChevronLeft, CircleAlert, Film, MessagesSquare, Sparkles, Users } from 'lucide-react';
 import { post, request } from '../../api';
 import { useWorkspace } from '../../components/UI';
 import { Btn, Card, Notice, PageHead } from '../../gy/ui';
@@ -9,7 +9,13 @@ import { folderPath, orderedFolders } from '../../gy/folders';
 import { ReferencePicker } from '../references';
 import { clock, sec, thumbUrl, useReferenceLibrary } from '../references/data';
 import type { StoryboardState } from '../../storyboard';
-import { analysisLabel, useLibrary, type Analysis, type ProductItem } from '../products/data';
+import {
+  analysisLabel,
+  needsReview,
+  useLibrary,
+  type Analysis,
+  type ProductItem,
+} from '../products/data';
 import ProductPicker from './ProductPicker';
 import { ProductButton, RatioPicker, ReferenceRow } from './parts';
 import {
@@ -21,38 +27,17 @@ import {
   type ProjectItem,
 } from './data';
 
-type NewMode = Exclude<Mode, 'OTHER'>;
-const MODES: [NewMode | 'STORY', string, string, string, string, typeof Film][] = [
-  [
-    'REMAKE',
-    '视频二创',
-    '按参考视频的结构和节奏，替换为你的商品。',
-    '拆镜头 → 替换商品与台词 → 确认分镜',
-    '',
-    Film,
-  ],
-  [
-    'FRAMEWORK',
-    '框架模式',
-    '从几套创作方向中选一套，再写分镜。',
-    '生成方向 → 选定 → 确认分镜',
-    '',
-    FileText,
-  ],
-  [
-    'ONE_CLICK',
-    '一键成片',
-    '确认资料后自动生成方案与分镜，提交视频生成。',
-    '自动出方案 → 生成视频',
-    '',
-    Sparkles,
-  ],
-  ['STORY', '剧情模式', '围绕人物与情节创作原创故事，商品自然出场。', '', '即将开放', Users],
+/** 新建页能选的：复刻、简易。框架模式不再从这里新建，老的框架模式项目照常打开（ModeDetail）。 */
+type NewMode = Extract<Mode, 'REMAKE' | 'ONE_CLICK'>;
+/** [key, 标题, 描述, tag, Icon, soon] */
+const MODES: [NewMode | 'PRO' | 'STORY', string, string, string, typeof Film, boolean][] = [
+  ['REMAKE', '复刻', '照参考视频的结构和节奏，换成你的商品。', '主推', Film, false],
+  ['ONE_CLICK', '简易', '资料齐了，自动出方向、分镜和成片。', '', Sparkles, false],
+  ['PRO', '专业', '和 AI 对话出方向和分镜，细调镜头数和时长。', '即将开放', MessagesSquare, true],
+  ['STORY', '故事', '用人物和情节讲故事，商品自然出场。', '即将开放', Users, true],
 ];
 const MODE_PARAM: Record<string, NewMode> = {
   remake: 'REMAKE',
-  frame: 'FRAMEWORK',
-  framework: 'FRAMEWORK',
   oneclick: 'ONE_CLICK',
   'one-click': 'ONE_CLICK',
 };
@@ -67,7 +52,8 @@ const factsOf = (a?: Analysis) =>
         .slice(0, 8000)
     : '';
 
-/** 新建项目：选商品、创作方式、（二创）参考视频、画幅分辨率、文件夹、名称，核对商品事实。右侧固定摘要。 */
+/** 新建项目：选商品、创作方式、（复刻）参考视频、画幅分辨率、文件夹、名称、商品事实。右侧固定摘要。
+ *  商品已核对时商品事实直接用商品分析里的，只显示一行；没核对才显示文本框和勾选。 */
 export default function ProjectNew() {
   const { client, notify } = useWorkspace();
   const navigate = useNavigate();
@@ -114,12 +100,14 @@ export default function ProjectNew() {
     queryFn: () => request<Analysis>(`/clients/${client.id}/product-groups/${anchor}/analysis`),
     enabled: !!anchor,
   });
+  const autoFacts = factsOf(analysis.data);
+  const ready = !!product && !needsReview(product) && !!autoFacts.trim();
   useEffect(() => {
     if (!anchor || factsFor === anchor || analysis.isPending) return;
-    setFacts(factsOf(analysis.data));
+    setFacts(autoFacts);
     setFactsFor(anchor);
-    setFactsOk(false);
-  }, [anchor, analysis.isPending, analysis.data, factsFor]);
+    setFactsOk(ready);
+  }, [anchor, analysis.isPending, autoFacts, factsFor, ready]);
 
   const ref = refs.find((r) => r.assetId === refId);
   const board = useQuery<StoryboardState>({
@@ -181,11 +169,7 @@ export default function ProjectNew() {
         refresh(),
         cache.invalidateQueries({ queryKey: [client.id, 'projects'] }),
       ]);
-      notify(
-        mode === 'REMAKE'
-          ? `项目「${item.name}」已创建，先看一下方向`
-          : `项目「${item.name}」已创建，${mode === 'FRAMEWORK' ? '去出方向' : '填好设置就能出片'}`,
-      );
+      notify(`项目「${item.name}」已创建`);
       navigate(item.flow ? `/p/${item.id}` : item.legacyPath);
     } catch (e) {
       setErr((e as Error).message);
@@ -202,25 +186,6 @@ export default function ProjectNew() {
         >{`商品分析：${analysisLabel(product)[0]}`}</span>,
       ]
     : ['从商品库里选，也可以在弹窗里新建'];
-  const nextSteps =
-    mode === 'REMAKE'
-      ? [
-          '创建项目，先看方向：参考视频的开头和改编思路',
-          '进入分镜，逐镜把画面和台词换成你的商品',
-          '确认分镜后才出片',
-        ]
-      : mode === 'FRAMEWORK'
-        ? [
-            '创建项目，选给谁看和时长，出几套方向',
-            '选 1~3 个方向，每个方向各写一份分镜',
-            '确认分镜后才出片',
-          ]
-        : [
-            '创建项目，填出片设置',
-            '点开始出片：自动写方向和分镜，接着出片',
-            '方向和分镜出完可以回头看、可以改',
-          ];
-
   return (
     <div className="gy-page gy-new">
       <button type="button" className="gy-backlink" onClick={() => navigate('/')}>
@@ -249,23 +214,22 @@ export default function ProjectNew() {
               <span className="no ok">✓</span>创作方式
             </h3>
             <div className="gy-modes" role="radiogroup" aria-label="创作方式">
-              {MODES.map(([k, t, d, flow, tag, Icon]) => (
+              {MODES.map(([k, t, d, tag, Icon, soon]) => (
                 <button
                   key={k}
                   type="button"
                   role="radio"
                   className="gy-mode"
                   aria-checked={mode === k}
-                  disabled={k === 'STORY'}
-                  onClick={() => k !== 'STORY' && setMode(k)}
+                  disabled={soon}
+                  onClick={() => !soon && setMode(k as NewMode)}
                 >
-                  {tag && <span className={`tag${k === 'REMAKE' ? ' hot' : ''}`}>{tag}</span>}
+                  {tag && <span className={`tag${soon ? '' : ' hot'}`}>{tag}</span>}
                   <span className="ic">
                     <Icon size={17} aria-hidden="true" />
                   </span>
                   <b>{t}</b>
                   <p>{d}</p>
-                  {flow && <span className="flow">{flow}</span>}
                 </button>
               ))}
             </div>
@@ -314,38 +278,20 @@ export default function ProjectNew() {
                   ))}
                 </div>
               )}
-              {report && (
-                <span className="gy-fine">
-                  原视频镜头与台词。在「分镜」步骤逐镜替换，确认前不会出片。
-                  {report.summary ? ` 结构：${report.summary}` : ''}
-                </span>
-              )}
+              {report?.summary && <span className="gy-fine">结构：{report.summary}</span>}
             </Card>
-          ) : (
-            <Card className="gy-pjs">
-              <h3>
-                <span className="no">3</span>接下来
-              </h3>
-              <div className="gy-infobox">
-                {mode === 'FRAMEWORK'
-                  ? '选定人群与时长后生成 3 套方向，每套含开头类型、前 3 秒拍法、卖点与场景。可并行测多套。'
-                  : '填出片设置后开始，自动写方向与分镜并出片。'}
-              </div>
-            </Card>
-          )}
+          ) : null}
           <Card className="gy-pjs">
             <h3>
-              <span className="no">{mode === 'REMAKE' ? 4 : 4}</span>视频设置
+              <span className="no">{mode === 'REMAKE' ? 4 : 3}</span>视频设置
             </h3>
             <div className="gy-set2">
               <span>画面</span>
               <span className="gy-rrline">
                 <RatioPicker ratio={rr.ratio} resolution={rr.resolution} onChange={setRR} />
-                <small className="gy-muted">
-                  {mode === 'REMAKE' && rr.ratio === '16:9'
-                    ? '参考视频多是竖屏，选横屏时镜头会按横屏重新构图'
-                    : '分辨率越高越清楚，出片也越慢'}
-                </small>
+                {mode === 'REMAKE' && rr.ratio === '16:9' && (
+                  <small className="gy-muted">参考视频多是竖屏，横屏会重新构图</small>
+                )}
               </span>
               <label htmlFor="pj-name">项目名称</label>
               <input
@@ -374,43 +320,55 @@ export default function ProjectNew() {
           </Card>
           <Card className="gy-pjs">
             <h3>
-              <span className={`no${factsOk ? ' ok' : ''}`}>{factsOk ? '✓' : 5}</span>核对商品事实
-              <small>视频仅使用此处事实</small>
-            </h3>
-            <div className="gy-factwrap">
-              <span className="src">
-                {analysis.data?.report
-                  ? `已带入商品分析（修订 ${analysis.data.revision}）`
-                  : product
-                    ? analysis.isPending
-                      ? '正在读取商品分析…'
-                      : '暂无分析，可手动填写'
-                    : '选定商品后自动带入分析'}
-                {product && <Link to={`/products/${product.anchorId}`}>查看商品分析</Link>}
+              <span className={`no${factsOk ? ' ok' : ''}`}>
+                {factsOk ? '✓' : mode === 'REMAKE' ? 5 : 4}
               </span>
-              <textarea
-                className="gy-textarea"
-                rows={5}
-                maxLength={8000}
-                aria-label="商品事实"
-                value={facts}
-                disabled={!product}
-                placeholder="只写能证明的外观和卖点"
-                onChange={(e) => {
-                  setFacts(e.target.value);
-                  setFactsOk(false);
-                }}
-              />
-              <label className="gy-check">
-                <input
-                  type="checkbox"
-                  checked={factsOk}
-                  disabled={!facts.trim()}
-                  onChange={(e) => setFactsOk(e.target.checked)}
+              商品事实
+              {!ready && <small>视频只用这里的事实</small>}
+            </h3>
+            {ready && product ? (
+              <div className="gy-factwrap">
+                <span className="src gy-factok">
+                  已就绪（修订 {analysis.data?.revision ?? 0}）
+                  <Link to={`/products/${product.anchorId}`}>查看商品分析</Link>
+                </span>
+              </div>
+            ) : (
+              <div className="gy-factwrap">
+                <span className="src">
+                  {!product
+                    ? '先选商品'
+                    : analysis.isPending
+                      ? '正在读取商品分析…'
+                      : analysis.data?.report
+                        ? `商品分析待核对（修订 ${analysis.data.revision}）`
+                        : '暂无商品分析，手动填写'}
+                  {product && <Link to={`/products/${product.anchorId}`}>查看商品分析</Link>}
+                </span>
+                <textarea
+                  className="gy-textarea"
+                  rows={5}
+                  maxLength={8000}
+                  aria-label="商品事实"
+                  value={facts}
+                  disabled={!product}
+                  placeholder="只写能证明的外观和卖点"
+                  onChange={(e) => {
+                    setFacts(e.target.value);
+                    setFactsOk(false);
+                  }}
                 />
-                已核对商品事实
-              </label>
-            </div>
+                <label className="gy-check">
+                  <input
+                    type="checkbox"
+                    checked={factsOk}
+                    disabled={!facts.trim()}
+                    onChange={(e) => setFactsOk(e.target.checked)}
+                  />
+                  已核对商品事实
+                </label>
+              </div>
+            )}
           </Card>
         </div>
         <aside className="gy-card gy-pjsum" aria-label="项目摘要">
@@ -438,26 +396,15 @@ export default function ProjectNew() {
                 ? ref?.storyboard.hasReport
                   ? `跟参考视频走（${clock(ref.storyboard.duration)}）`
                   : '跟参考视频走'
-                : mode === 'FRAMEWORK'
-                  ? '出方向时选 15 或 30 秒'
-                  : '出片设置里选 15 或 30 秒'}
+                : '15 或 30 秒，出片设置里选'}
             </dd>
             <dt>画面</dt>
             <dd>{formatRR(rr)}</dd>
             <dt>文件夹</dt>
             <dd>{folderPath(folders, folderId || null)}</dd>
             <dt>事实</dt>
-            <dd className={factsOk ? '' : 'no'}>{factsOk ? '已核对' : '未核对'}</dd>
+            <dd className={factsOk ? '' : 'no'}>{factsOk ? '已就绪' : '待核对'}</dd>
           </dl>
-          <div className="next">
-            <b>点击后</b>
-            {nextSteps.map((x, i) => (
-              <span key={x}>
-                <i>{i + 1}</i>
-                {x}
-              </span>
-            ))}
-          </div>
           {block && (
             <span className="block" role="status">
               <CircleAlert size={13} aria-hidden="true" />

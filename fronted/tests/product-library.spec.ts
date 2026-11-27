@@ -407,14 +407,16 @@ test('new product: fill, upload and analyze, then review and save', async ({ pag
   expect(
     state.writes.some((w) => w.method === 'POST' && w.path.endsWith('/product-groups/n1/analysis')),
   ).toBeTruthy();
-  await expect(page.locator('.gy-prog')).toContainText('0 / 4');
+  // 第一次核对：已验证的（看得到的卖点、卖点文案、用户痛点）默认勾上，待验证的不勾
+  await expect(page.locator('.gy-prog')).toContainText('3 / 4');
+  await expect(page.locator('.gy-actbar')).toContainText('还有 1 条待你看一眼 · 1 项信息待补充');
   await page.getByRole('button', { name: '本节全部确认' }).first().click();
-  await expect(page.locator('.gy-prog')).toContainText('1 / 4');
+  await expect(page.locator('.gy-prog')).toContainText('3 / 4');
   await page.getByRole('button', { name: '补充', exact: true }).click();
   await page.getByLabel('补充：鞋面具体材质成分').fill('翻毛皮和网布');
   await page.keyboard.press('Enter');
   await expect(page.getByText('已补充')).toBeVisible();
-  await page.getByRole('button', { name: '确认并保存商品' }).click();
+  await page.getByRole('button', { name: '确认用于视频' }).click();
   await expect(page).toHaveURL(/\/products\/n1$/);
   const edit = state.writes.find(
     (w) => w.method === 'PUT' && w.path.endsWith('/product-groups/n1/analysis'),
@@ -423,7 +425,7 @@ test('new product: fill, upload and analyze, then review and save', async ({ pag
     '鞋面具体材质成分：翻毛皮和网布（已补充）',
   ]);
   expect(state.writes.find((w) => w.path.endsWith('/product-groups/n1/review'))!.body).toEqual({
-    confirmed: ['provable|灰白多材质拼接外观'],
+    confirmed: ['provable|灰白多材质拼接外观', 'pitch|灰白拼接很耐看', 'pain|普通运动鞋单调'],
     reviewed: true,
   });
 });
@@ -473,7 +475,7 @@ test('商品理解 tags and 目标人群 can be added, edited and removed', asyn
   await page.goto('/products/a1');
   const uk = page.getByRole('region', { name: '商品理解' });
   await expect(uk).toContainText('灰白多材质拼接外观');
-  await expect(uk).toContainText('还没保存');
+  await expect(uk).toContainText('自动整理自商品分析');
   await uk.getByLabel('添加购买时机，回车确认').fill('换季添鞋');
   await page.keyboard.press('Enter');
   await expect(uk.locator('.gy-tag').filter({ hasText: '换季添鞋' })).toBeVisible();

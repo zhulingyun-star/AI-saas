@@ -560,14 +560,15 @@ test('项目列表：文件夹、搜索、改名、移动，旧流程的框架�
   await expect(page).toHaveURL(/\/studio\/p2\?framework=1$/);
 });
 
-test('新建项目：视频二创（商品弹窗、参考视频弹窗、画幅分辨率、文件夹、核对事实）', async ({
+test('新建项目：复刻默认选中；商品已核对时事实只显示一行（商品弹窗、参考视频弹窗、画幅分辨率、文件夹）', async ({
   page,
 }) => {
   const state = await mockProjects(page);
   await page.goto('/p/new');
   const sum = page.getByRole('complementary', { name: '项目摘要' });
+  await expect(page.getByRole('radio', { name: /复刻/ })).toHaveAttribute('aria-checked', 'true');
   // 只有一个商品时直接选上；还是可以打开弹窗换
-  await expect(sum.getByRole('button', { name: '创建项目，看方向' })).toBeDisabled();
+  await expect(sum.getByRole('button', { name: '创建项目' })).toBeDisabled();
   await page.getByRole('button', { name: /商品：新百伦 992 灰白复古鞋/ }).click();
   const pd = page.getByRole('dialog', { name: '选择商品' });
   await pd.getByLabel('在弹窗里搜索商品').fill('不存在');
@@ -581,17 +582,20 @@ test('新建项目：视频二创（商品弹窗、参考视频弹窗、画幅�
   await rd.getByRole('radio', { name: '防晒隔离霜带货' }).click();
   await rd.getByRole('button', { name: '用这条' }).click();
   await expect(page.locator('.gy-pjshots .sh')).toHaveCount(2);
-  await expect(page.getByLabel('商品事实', { exact: true })).toHaveValue(/灰白拼色低帮系带/);
-  await expect(sum).toContainText('勾选“已核对商品事实”');
+  // 商品已核对：不出文本框和勾选，事实自动带上
+  await expect(page.getByText('已就绪（修订 5）')).toBeVisible();
+  await expect(page.getByLabel('商品事实', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('已核对商品事实')).toHaveCount(0);
+  await expect(sum).toContainText('已就绪');
+  await expect(sum).not.toContainText('点击后');
   await page
     .getByRole('group', { name: '画幅' })
     .getByRole('button', { name: '横屏 16:9' })
     .click();
   await page.getByRole('group', { name: '分辨率' }).getByRole('button', { name: '1080p' }).click();
   await page.getByLabel('放进文件夹').selectOption('f1');
-  await page.getByLabel('已核对商品事实').check();
   await expect(sum).toContainText('横屏 16:9 · 1080p');
-  await sum.getByRole('button', { name: '创建项目，看方向' }).click();
+  await sum.getByRole('button', { name: '创建项目' }).click();
   await expect(page).toHaveURL(/\/p\/new1$/);
   expect(state.created[0]).toMatchObject({
     mode: 'REMAKE',
@@ -601,17 +605,24 @@ test('新建项目：视频二创（商品弹窗、参考视频弹窗、画幅�
     resolution: '1080p',
     folderId: 'f1',
     factsConfirmed: true,
-    name: '新百伦 992 灰白复古鞋 · 视频二创',
+    name: '新百伦 992 灰白复古鞋 · 复刻',
   });
+  expect(state.created[0].facts).toContain('灰白拼色低帮系带');
 });
 
-test('新建项目：框架模式、一键成片也进新版详情；剧情模式不能选；弹窗里新建商品', async ({
+test('新建项目：四种方式（专业、故事灰显，没有框架模式）；简易进新版详情；未核对的商品要填事实并勾选', async ({
   page,
 }) => {
   const state = await mockProjects(page);
   await page.goto('/p/new');
-  await expect(page.getByRole('radio', { name: /剧情模式/ })).toBeDisabled();
-  await page.getByRole('radio', { name: /框架模式/ }).click();
+  const modes = page.getByRole('radiogroup', { name: '创作方式' }).getByRole('radio');
+  await expect(modes).toHaveCount(4);
+  await expect(modes.nth(0)).toContainText('复刻');
+  await expect(modes.nth(1)).toContainText('简易');
+  await expect(page.getByRole('radio', { name: /专业/ })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: /故事/ })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: /框架模式/ })).toHaveCount(0);
+  await page.getByRole('radio', { name: /简易/ }).click();
   await expect(page.getByRole('button', { name: /选一条参考视频/ })).toHaveCount(0);
   await page.getByRole('button', { name: /商品：新百伦 992 灰白复古鞋/ }).click();
   const pd = page.getByRole('dialog', { name: '选择商品' });
@@ -624,19 +635,24 @@ test('新建项目：框架模式、一键成片也进新版详情；剧情模�
   });
   await pd.getByRole('button', { name: '保存并选用' }).click();
   await expect(page.getByRole('button', { name: /商品：弹窗里新建的鞋/ })).toBeVisible();
-  // 换回已有商品，做框架模式
+  // 新建的商品还没核对：显示事实文本框，勾选后才能建
+  const sum = page.getByRole('complementary', { name: '项目摘要' });
+  await expect(page.getByLabel('商品事实', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('已核对商品事实')).not.toBeChecked();
+  await expect(sum).toContainText('待核对');
+  // 换回已核对的商品：事实只显示一行
   await page.getByRole('button', { name: /商品：弹窗里新建的鞋/ }).click();
   await pd.getByRole('radio', { name: '新百伦 992 灰白复古鞋' }).click();
   await pd.getByRole('button', { name: '选这个商品' }).click();
-  await page.getByLabel('已核对商品事实').check();
-  await page.getByRole('button', { name: '创建项目，去出方向' }).click();
+  await expect(page.getByText('已就绪（修订 5）')).toBeVisible();
+  await sum.getByRole('button', { name: '创建项目' }).click();
   await expect(page).toHaveURL(/\/p\/new1$/);
   await page.goto('/p/new?mode=oneclick');
-  await page.getByLabel('已核对商品事实').check();
-  await expect(page.getByText('这一步不会生成视频。')).toBeVisible();
-  await page.getByRole('button', { name: '创建项目，去填设置' }).click();
+  await expect(page.getByRole('radio', { name: /简易/ })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByText('已就绪（修订 5）')).toBeVisible();
+  await page.getByRole('button', { name: '创建项目' }).click();
   await expect(page).toHaveURL(/\/p\/new2$/);
-  expect(state.created.map((x: Any) => x.mode)).toEqual(['FRAMEWORK', 'ONE_CLICK']);
+  expect(state.created.map((x: Any) => x.mode)).toEqual(['ONE_CLICK', 'ONE_CLICK']);
 });
 
 test('视频二创四步：方向选人群、分镜编辑保存、广告用语检查和忽略、确认后出第一版', async ({
@@ -662,7 +678,7 @@ test('视频二创四步：方向选人群、分镜编辑保存、广告用语�
     .getByRole('navigation', { name: '制作步骤' })
     .getByRole('button', { name: /^第 4 步/ })
     .click();
-  await expect(page.getByRole('toolbar', { name: '这一步的操作' })).toContainText('分镜还没确认');
+  await expect(page.getByRole('toolbar', { name: '这一步的操作' })).toContainText('分镜待确认');
   await page
     .getByRole('navigation', { name: '制作步骤' })
     .getByRole('button', { name: /^第 3 步/ })
@@ -762,7 +778,7 @@ test('多版本：单独审片（差必填原因）、改这一版再出、AI �
   await expect.poll(() => state.verdicts.at(-1)).toMatchObject({ id: 'old2', use: 'USABLE' });
   // 出片词按段，和上一版不同的段标出来；出片词里的违规说法只标出、计数
   await v1.locator('summary', { hasText: '这一版的出片词' }).click();
-  await expect(v1).toContainText('1 处可能违规的说法（只标出来，不改也能出）');
+  await expect(v1).toContainText('1 处可能违规的说法');
   await cards.first().locator('summary', { hasText: '这一版的出片词' }).click();
   await expect(cards.first().locator('.gy-pseg.chg')).toHaveCount(1);
   // 对比
@@ -806,7 +822,7 @@ test('参考视频详情「用它新建项目」带着这条参考视频进新�
   await page.getByRole('button', { name: '用它新建项目' }).click();
   await expect(page).toHaveURL(/\/p\/new\?mode=remake&reference=ref$/);
   await expect(page.locator('.gy-refv')).toContainText('防晒隔离霜带货');
-  await expect(page.getByRole('radio', { name: /视频二创/ })).toHaveAttribute(
+  await expect(page.getByRole('radio', { name: /复刻/ })).toHaveAttribute(
     'aria-checked',
     'true',
   );

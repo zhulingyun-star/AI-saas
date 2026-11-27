@@ -87,7 +87,7 @@ export default function VideoList() {
     <div className="gy-page gy-new">
       <PageHead
         title={by ? `全部成片 · ${by.label}分组` : '全部成片'}
-        description="项目里出好的每一版都在这里。左边选一种分类方式，成片会按它分组；点开能看视频、出片词、审片和投放数据。"
+        description="项目里出好的每一版。"
       >
         <Btn onClick={() => navigate('/library/import')}>
           <Upload size={14} aria-hidden="true" />
@@ -152,7 +152,6 @@ export default function VideoList() {
       ) : !videos.length ? (
         <EmptyState title="还没有出好的成片" icon={<Film size={22} />}>
           <span>
-            项目里每出好一版，就会出现在这里。
             {pending ? `现在有 ${pending} 版还没出好或没出成功，在各自的项目里看。` : ''}
           </span>
           <Btn variant="primary" onClick={() => navigate('/')}>
@@ -190,9 +189,8 @@ export default function VideoList() {
         <p className="gy-muted gy-libfoot">
           共 {videos.length} 条成片{rows.length !== videos.length ? `，筛出 ${rows.length} 条` : ''}
           ；{filled ? `${filled} 条填了投放数据` : '还没有成片填投放数据'}
-          （数字都来自手填或导入的表格）。
-          {pending ? ` 另有 ${pending} 版还没出好或没出成功，不算成片。` : ''}
-          {sort ? ' 排序时没填数据的排在最后。' : ''}
+          。
+          {pending ? ` 另有 ${pending} 版还没出好或没出成功。` : ''}
         </p>
       )}
     </div>

@@ -31,7 +31,7 @@ function defaultStep(f: Flow): Step {
   return 2;
 }
 
-/** 项目详情：商品 → 方向 → 分镜 → 出片。这里是视频二创；框架模式 / 一键成片交给 ModeDetail。 */
+/** 项目详情：商品 → 方向 → 分镜 → 出片。这里是复刻；框架模式 / 简易交给 ModeDetail。 */
 export default function ProjectDetail() {
   const { id = '' } = useParams();
   const { client, notify } = useWorkspace();
@@ -105,7 +105,6 @@ export default function ProjectDetail() {
                 </Btn>
               }
             >
-              旧流程里建的框架模式、一键成片和以前的作品在原来的制作页里继续。
             </Notice>
           ) : (
             <Notice tone="error" title="项目没打开">
@@ -167,7 +166,7 @@ export default function ProjectDetail() {
           ? `${f.versions.length} 个版本`
           : f.storyboard.confirmed
             ? '可以出第一版'
-            : '确认分镜后才能出片',
+            : '待确认分镜',
       running || (f.storyboard.confirmed && !f.versions.length)
         ? 'now'
         : f.versions.length
@@ -208,7 +207,6 @@ export default function ProjectDetail() {
           disabled={busy}
           onChange={(next) => void settings(next, `已改成 ${formatRR(next)}，只影响之后出的版本`)}
         />
-        <small className="gy-muted">改了只影响之后出的版本，已出的不变。</small>
       </div>
       <label className="gy-rrrail">
         <b>文件夹</b>
@@ -256,8 +254,7 @@ export default function ProjectDetail() {
           </Btn>
         }
       >
-        这个项目用 <b>{f.product.name}</b> 和参考视频 <b>{ref.name}</b>
-        。都可以换，换了要重新确认分镜。
+        这个项目用 <b>{f.product.name}</b> 和参考视频 <b>{ref.name}</b>。
       </TopBar>
       <Card className="gy-pjs">
         <h3>
@@ -280,7 +277,7 @@ export default function ProjectDetail() {
       </Card>
       <Card className="gy-pjs">
         <h3>
-          参考视频<small>视频二创的方向来自这条参考视频 · 只学结构和节奏，不放进成片</small>
+          参考视频<small>只学结构和节奏，不放进成片</small>
         </h3>
         <ReferenceRow
           item={ref}
@@ -304,11 +301,11 @@ export default function ProjectDetail() {
           </Btn>
         }
       >
-        方向来自参考视频 <b>{ref.name}</b>：看一下改编思路、开头和给谁看，然后去分镜逐镜改。
+        方向来自参考视频 <b>{ref.name}</b>。
       </TopBar>
       <Card className="gy-pjs">
         <h3>
-          参考视频<small>只学结构和节奏，不放进成片</small>
+          参考视频
         </h3>
         <ReferenceRow
           item={ref}
@@ -359,20 +356,19 @@ export default function ProjectDetail() {
         ) : approachText ? (
           <div className="gy-approach">
             {!f.settings.approach && f.legacyApproach && (
-              <b>旧的二创流程里写过（{f.legacyApproach.relation}）：</b>
+              <b>以前写过（{f.legacyApproach.relation}）：</b>
             )}
             {approachText}
           </div>
         ) : (
           <div className="gy-approach">
-            还没有改编思路。可以自己写一段
-            {f.aiEnabled ? '，或者在分镜里让 AI 按商品写' : '（文字模型没配置，AI 暂时写不了）'}。
+            还没有改编思路。
           </div>
         )}
       </Card>
       <Card className="gy-pjs">
         <h3>
-          参考视频的开头<small>来自参考视频库的标注</small>
+          参考视频的开头
           <Link className="gy-link" to={`/references/${ref.assetId}`}>
             去参考视频库改
           </Link>
@@ -390,7 +386,6 @@ export default function ProjectDetail() {
         ) : (
           <div className="gy-hookv">
             <em>还没标</em>
-            <span className="tip">在参考视频库里看完开头，从 8 种开头类型里选一个。</span>
           </div>
         )}
       </Card>
@@ -422,7 +417,7 @@ export default function ProjectDetail() {
             ))}
           </div>
         ) : (
-          <span className="gy-muted">这个商品还没有人群，去商品库补上以后这里可以选。</span>
+          <span className="gy-muted">这个商品还没有人群。</span>
         )}
         {(() => {
           const cur = personas.find((x) => x.name === f.settings.personaName);
@@ -436,7 +431,7 @@ export default function ProjectDetail() {
               ]
                 .filter(Boolean)
                 .join('　')}
-              {!cur.id && <small>（这是按商品分析推出来的建议人群，商品库里还没保存）</small>}
+              {!cur.id && <small>（建议人群）</small>}
             </div>
           ) : null;
         })()}
@@ -494,7 +489,7 @@ export default function ProjectDetail() {
               folderPath(folders, p.folderId),
             ].join(' · ')}
           </p>
-          <p className="gy-fine">方向来自参考视频 · 商品 → 方向 → 分镜 → 出片</p>
+          <p className="gy-fine">商品 → 方向 → 分镜 → 出片</p>
         </div>
       </div>
       <nav className="gy-uni" aria-label="制作步骤">
@@ -516,7 +511,7 @@ export default function ProjectDetail() {
       {err && <Notice tone="error">{err}</Notice>}
       {!f.product.analysis.hasReport && (
         <Notice tone="warn" title="商品还没有分析结果">
-          广告用语检查只能查通用的说法；商品分析里「不能夸大的说法」要等分析完成才会一起查。
+          先只查通用的违规说法。
         </Notice>
       )}
       <div className="gy-pdgrid">
@@ -607,7 +602,7 @@ export default function ProjectDetail() {
   );
 }
 
-/** 视频二创整个项目只有一条出片线 */
+/** 复刻整个项目只有一条出片线 */
 function remakeLane(f: Flow, go: (s: Step) => void): Lane {
   return {
     versions: f.versions,
@@ -617,7 +612,7 @@ function remakeLane(f: Flow, go: (s: Step) => void): Lane {
     hook: f.reference.hook ?? '',
     personaName: f.settings.personaName,
     notReady: {
-      msg: '分镜还没确认，确认以后才能出片。',
+      msg: '分镜待确认。',
       actions: (
         <Btn variant="primary" onClick={() => go(3)}>
           去确认分镜

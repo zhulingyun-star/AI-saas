@@ -189,7 +189,6 @@ export default function ReferenceDetail() {
           <span role="status">
             {board.data?.progress?.phase ?? '等待开始'} · 已等待 {waited} 秒
           </span>
-          <span className="gy-fine">拆完这里会自动显示每个镜头、台词和结构总结，不用刷新。</span>
         </>
       ) : board.data?.status === 'FAILED' ? (
         <>
@@ -204,11 +203,7 @@ export default function ReferenceDetail() {
       ) : (
         <>
           <b>还没拆解</b>
-          <span>
-            {enabled
-              ? '拆解后会列出每个镜头的时间、机位、画面和台词。'
-              : '读片模型还没配置，暂时拆不了。视频已经存在库里，可以先播放、改名、放进文件夹。'}
-          </span>
+          {!enabled && <span>读片模型还没配置，暂时拆不了。</span>}
           {enabled && (
             <Btn variant="primary" onClick={() => setDialog('redo')}>
               <Sparkles size={14} aria-hidden="true" />
@@ -339,7 +334,7 @@ export default function ReferenceDetail() {
           </div>
         ) : (
           <span className="gy-muted">
-            每镜任务还没标，在“镜头拆解”里标好以后，这里会按顺序列出来。
+            每镜任务还没标。
           </span>
         )}
       </div>
@@ -426,7 +421,7 @@ export default function ReferenceDetail() {
       {running && report && (
         <Notice tone="info" title="正在重新拆解">
           {board.data?.progress?.phase ?? '等待开始'} · 已等待 {waited}{' '}
-          秒。下面先显示上一次的结果，拆完会自动更新。
+          秒。下面是上一次的结果。
         </Notice>
       )}
       {!running && board.data?.status === 'FAILED' && report && (
@@ -528,8 +523,7 @@ export default function ReferenceDetail() {
                 <span className="gy-fine">
                   {labels.hook
                     ? `${labels.hook}：${hookTip(labels.hook)}。再点一次可以取消。`
-                    : '看一下第 1 镜怎么开口，从 8 种里选一个；拿不准可以先不标。'}
-                  {report ? ' 每镜任务在下面每个镜头里选。' : ' 拆解完才能标每镜任务。'}
+                    : '看第 1 镜怎么开口，从 8 种里选一个。'}
                 </span>
               </>
             ) : (
@@ -542,7 +536,6 @@ export default function ReferenceDetail() {
                 ) : (
                   <>
                     <em>还没标</em>
-                    <span className="tip">拆解结果里没有开头类型，需要人工看完开头再选。</span>
                   </>
                 )}
               </div>
@@ -604,7 +597,6 @@ export default function ReferenceDetail() {
               ))}
             </select>
           </Field>
-          <span className="gy-fine">一条参考视频只放在一个文件夹里。</span>
           {dialogErr && <Notice tone="error">{dialogErr}</Notice>}
         </Dialog>
       )}
@@ -626,7 +618,7 @@ export default function ReferenceDetail() {
           <p>
             {report
               ? '会用新结果替换现在的镜头、台词和结构总结（之前手动改过的分镜也会被替换）。开头类型会保留；镜头变了的话，每镜任务要重新标。'
-              : '拆出每个镜头的时间、机位、画面和台词，拆完自动显示。'}
+              : '拆出每个镜头的时间、机位、画面和台词。'}
           </p>
           {dialogErr && <Notice tone="error">{dialogErr}</Notice>}
         </Dialog>

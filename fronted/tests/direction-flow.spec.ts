@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 /**
  * 框架模式 / 一键成片的新版四步，跑在真后端上（本机开发环境：AI_MODE=local，视频接口没启用）。
- * 本地模式下方向和分镜是按商品理解拼的本地模板，界面上要标明不是 AI 写的；出片只记下来，不发出请求。
+ * 本地模式下方向和分镜是按商品理解拼的，界面上只在方向卡和分镜标题旁标一个「模板」，不再有长段说明；出片只记下来，不发出请求。
  * 不调用任何模型或视频接口。
  */
 
@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page
     .getByLabel('密码', { exact: true })
     .fill(process.env.E2E_PASSWORD ?? 'change-me-local');
-  await page.getByRole('button', { name: '进入工作空间' }).click();
+  await page.getByRole('button', { name: '登录', exact: true }).click();
   await expect(page.getByRole('heading', { name: '全部项目', exact: true })).toBeVisible();
 });
 
@@ -64,8 +64,9 @@ test('框架模式四步：出方向、改格子、多选两个方向、两份�
   await bar(page).getByRole('button', { name: '出 3 套方向' }).click();
   const picks = page.getByRole('button', { name: /^选择方向「/ });
   await expect(picks).toHaveCount(3);
-  await expect(page.getByText('本地模板 · 不是 AI 写的').first()).toBeVisible();
-  await expect(page.getByText('这些方向不是 AI 写的')).toBeVisible();
+  await expect(page.locator('.gy-dircard .srcs i.local', { hasText: '模板' }).first()).toBeVisible();
+  await expect(page.getByText('这些方向不是 AI 写的')).toHaveCount(0);
+  await expect(page.getByText(/本地模板/)).toHaveCount(0);
   // 改第 1 套的格子：开头类型和开口第一句；极限词实时标出来
   await page.getByRole('button', { name: '改格子' }).first().click();
   await page
@@ -96,7 +97,8 @@ test('框架模式四步：出方向、改格子、多选两个方向、两份�
   await expect(tabs.getByRole('tab')).toHaveCount(2);
   await expect(page.getByText('15 秒骨架建议')).toBeVisible();
   await expect(page.locator('.gy-dshot')).toHaveCount(5);
-  await expect(page.getByText('这份分镜不是 AI 写的')).toBeVisible();
+  await expect(page.locator('.gy-srctag', { hasText: '模板' })).toBeVisible();
+  await expect(page.getByText('这份分镜不是 AI 写的')).toHaveCount(0);
   await expect(page.locator('#adsum')).toContainText('台词里有 1 处可能违规的说法');
   // 改第 2 镜的画面，保存后能恢复成写出来时的原文
   const orig = await page.locator('#dshot-2 dd').first().innerText();
@@ -106,7 +108,7 @@ test('框架模式四步：出方向、改格子、多选两个方向、两份�
   await expect(page.locator('#dshot-2')).toContainText('双手捧鞋转到侧面');
   await page
     .locator('#dshot-2')
-    .getByRole('button', { name: /恢复成本地模板写的原文/ })
+    .getByRole('button', { name: /恢复原文/ })
     .click();
   await expect(page.locator('#dshot-2 dd').first()).toHaveText(orig);
   // 逐个确认：确认 A 后自动切到 B，确认 B 后进出片
@@ -141,7 +143,7 @@ test('框架模式四步：出方向、改格子、多选两个方向、两份�
   ).toContainText('1 个版本');
 });
 
-test('一键成片：新建只建项目；设置 → 自动写方向和分镜 → 出片，每版记下设置', async ({ page }) => {
+test('简易：新建只建项目；设置 → 自动写方向和分镜 → 出片，每版记下设置', async ({ page }) => {
   const { id } = await createProject(page, 'ONE_CLICK');
   await page.goto(`/p/${id}`);
   await expect(page.getByRole('button', { name: /^第 4 步：出片/ })).toHaveAttribute(
@@ -163,7 +165,7 @@ test('一键成片：新建只建项目；设置 → 自动写方向和分镜 �
     .getByRole('button', { name: '只出手' })
     .click();
   await bar(page).getByRole('button', { name: '开始出片' }).click();
-  await expect(bar(page)).toContainText('用本地模板写方向和分镜');
+  await expect(bar(page)).toContainText('按现在的设置重写方向和分镜');
   await bar(page).getByRole('button', { name: '确认出片' }).click();
   const v1 = page.locator('.gy-ocver').first();
   await expect(v1).toContainText('第 1 版');
@@ -183,7 +185,7 @@ test('一键成片：新建只建项目；设置 → 自动写方向和分镜 �
   await bar(page).getByRole('button', { name: '回到出片' }).click();
   // 设置没变：沿用改过的分镜再出一版
   await bar(page).getByRole('button', { name: '再出一版' }).click();
-  await expect(bar(page)).toContainText('设置没变');
+  await expect(bar(page)).toContainText('用现在的方向和分镜');
   await bar(page).getByRole('button', { name: '确认出片' }).click();
   await expect(page.locator('.gy-ocver')).toHaveCount(2);
   await expect(page.locator('.gy-ocver').first()).toContainText(

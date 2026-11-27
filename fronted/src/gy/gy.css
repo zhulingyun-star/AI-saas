@@ -2986,7 +2986,7 @@
   }
 }
 
-/* =================== 项目（列表、新建、视频二创四步详情） =================== */
+/* =================== 项目（列表、新建、复刻四步详情） =================== */
 .gy-pjops {
   white-space: nowrap;
   width: 70px;
@@ -4322,7 +4322,7 @@
   }
 }
 
-/* ---------- 框架模式 / 一键成片：方向卡、改格子、方向切换、每个方向的分镜、一键成片设置 ---------- */
+/* ---------- 框架模式 / 简易：方向卡、改格子、方向切换、每个方向的分镜、简易设置 ---------- */
 .gy-dirgridc {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
@@ -6106,4 +6106,84 @@
   .gy-tm-events li small {
     grid-column: 1;
   }
+}
+
+/* ---------- 商品详情「体检报告」：理解 / 人群两张卡可折叠（未核对展开，核对后收起） ---------- */
+.gy-new .gy-fold {
+  /* 盖掉旧样式里全局 details 的留白、底线和字号 */
+  padding: 0;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+  background: var(--gy-card);
+  border: 1px solid var(--gy-hair2);
+  border-radius: var(--gy-r-xl);
+  box-shadow: var(--gy-shadow-card);
+  min-width: 0;
+}
+.gy-new .gy-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--gy-fs-lg);
+  font-weight: 500;
+  color: var(--gy-ink);
+  user-select: none;
+}
+.gy-new .gy-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.gy-new .gy-fold > summary::after {
+  content: '展开';
+  margin-left: auto;
+  font-size: var(--gy-fs-sm);
+  font-weight: 400;
+  color: var(--gy-action);
+}
+.gy-new .gy-fold[open] > summary::after {
+  content: '收起';
+}
+.gy-new .gy-fold[open] > summary {
+  border-bottom: 1px solid var(--gy-hair2);
+}
+.gy-new .gy-fold > summary:focus-visible {
+  outline: 2px solid var(--gy-action);
+  outline-offset: -2px;
+  border-radius: var(--gy-r-xl);
+}
+/* 里面的卡片去掉自己的边框和标题，标题由 summary 显示 */
+.gy-new .gy-fold > .gy-card {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding-top: 12px;
+}
+.gy-new .gy-fold > .gy-card > .gy-card-head > h3 {
+  display: none;
+}
+.gy-new .gy-fold > .gy-notice {
+  margin: 12px 18px;
+}
+
+/* 新建项目：商品已核对时商品事实只占一行 */
+.gy-factwrap .src.gy-factok {
+  color: var(--gy-success);
+  font-size: var(--gy-fs-base);
+}
+/* 不是文字模型写的（source=LOCAL）：分镜标题旁的小标签「模板」 */
+.gy-new .gy-srctag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: var(--gy-r-pill);
+  background: var(--gy-tint);
+  color: var(--gy-sec);
+  font-size: var(--gy-fs-xs);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 18px;
+  vertical-align: 1px;
 }

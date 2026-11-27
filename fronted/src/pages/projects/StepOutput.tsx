@@ -30,7 +30,7 @@ export const RELAY = [
   ['price', '换价格说法'],
 ] as const;
 export type RelayKind = (typeof RELAY)[number][0];
-export const PRICE_NO = '商品资料里还没有价格，先去商品库补上真实价格和活动，AI 不会自己编';
+export const PRICE_NO = '商品资料里没有价格，先去商品库补上';
 const HOOK_ORDER = [
   '痛点型',
   '对比型',
@@ -66,10 +66,10 @@ export type Pending = {
   note: string;
   basedOn: string | null;
   msg: string;
-  /** 一键成片的“开始出片”走自己的接口 */
+  /** 简易的“开始出片”走自己的接口 */
   run?: () => Promise<Version>;
 };
-/** 一条出片线：视频二创整个项目一条；框架模式每个方向一条；一键成片整个项目一条 */
+/** 一条出片线：复刻整个项目一条；框架模式每个方向一条；简易整个项目一条 */
 export interface Lane {
   directionId?: string;
   versions: Version[];
@@ -88,9 +88,9 @@ export interface Lane {
     open: (p: Pending) => void,
     latest?: Version,
   ) => { msg: ReactNode; actions: ReactNode } | null;
-  /** 顶部操作条下面、版本列表上面的内容（一键成片的设置） */
+  /** 顶部操作条下面、版本列表上面的内容（简易的设置） */
   before?: ReactNode;
-  /** 版本卡标题下面的补充（一键成片的设置标签） */
+  /** 版本卡标题下面的补充（简易的设置标签） */
   extra?: (v: Version, prev?: Version) => ReactNode;
 }
 export interface OutputProps {
@@ -109,7 +109,7 @@ type Editing = {
 };
 
 /** 第 4 步 出片：每版一张卡（新的在上），单独审片，改这一版再出，两版并排对比，基于某一版再做一条。
- *  视频二创、框架模式（每个方向一条线）、一键成片共用。 */
+ *  复刻、框架模式（每个方向一条线）、简易共用。 */
 export default function StepOutput({ flow, lane, reload }: OutputProps) {
   const { client, notify } = useWorkspace();
   const versions = lane.versions;
@@ -199,7 +199,7 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
       return;
     }
     openEdit(v, kind[0]);
-    notify(`已带上「${kind[1]}」的改法，看一眼再点「按这句改」`);
+    notify(`已带上「${kind[1]}」的改法`);
     window.setTimeout(() => {
       const el = document.querySelector<HTMLInputElement>('[aria-label="一句话说要怎么改"]');
       el?.scrollIntoView?.({ block: 'center' });
@@ -315,7 +315,7 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
           </Btn>
         }
       >
-        分镜已确认。下面是按分镜拼好的出片词，看一下就能出第一版。
+        分镜已确认。
       </TopBar>
     );
   else
@@ -331,7 +331,7 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
       >
         已出 {versions.length} 版 · 可投放{' '}
         {versions.filter((v) => v.verdict?.use === 'USABLE').length}{' '}
-        版。每版都能单独审片；要改就点某一版的「改这一版再出」。
+        版。
       </TopBar>
     );
 
@@ -344,14 +344,14 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
       {err && <Notice tone="error">{err}</Notice>}
       {!flow.videoEnabled && (
         <Notice tone="warn" title="视频接口没启用">
-          现在出片只会把这一版的出片词和设置记下来，不会真的发出生成请求；配置好视频接口以后再出。
+          出片只记下出片词和设置，不发出生成请求。
         </Notice>
       )}
       {lane.before}
       {lane.ready && !versions.length && !lane.idle && (
         <Card className="gy-pjs">
           <h3>
-            第 1 版的出片词<small>按已确认的分镜拼出来的，{lane.draftSegments.length} 段</small>
+            第 1 版的出片词<small>{lane.draftSegments.length} 段</small>
           </h3>
           <SegmentList segments={lane.draftSegments} ctx={ctx} />
         </Card>
@@ -414,8 +414,6 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
                   </span>
                   <small>
                     已等待 {elapsed(v.createdAt, now)}
-                    <br />
-                    可以离开页面，出好了会出现在这里
                   </small>
                 </div>
               ) : (
@@ -502,7 +500,7 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
                     </span>
                     {!flow.aiEnabled && (
                       <small className="gy-muted">
-                        文字模型没配置，AI 暂时改不了；可以直接改下面的段落。
+                        文字模型没配置，AI 改不了。
                       </small>
                     )}
                     {edit.error && <Notice tone="error">{edit.error}</Notice>}
@@ -511,7 +509,7 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
                     )}
                   </div>
                   <span className="gy-fine">
-                    或者直接改某一段（只改要改的那段，其余不动）。想长期改镜头和台词，回「分镜」改。
+                    或者直接改某一段。
                   </span>
                   <div className="gy-ocsecs">
                     {edit.segments.map((s, j) => {
@@ -563,7 +561,7 @@ export default function StepOutput({ flow, lane, reload }: OutputProps) {
                       {hits > 0 && (
                         <span className="gy-adcnt">
                           {' '}
-                          · {hits} 处可能违规的说法（只标出来，不改也能出）
+                          · {hits} 处可能违规的说法
                         </span>
                       )}
                     </summary>

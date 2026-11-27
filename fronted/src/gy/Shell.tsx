@@ -4,12 +4,9 @@ import {
   BookOpen,
   ChartNoAxesCombined,
   ChevronDown,
-  Clapperboard,
   Film,
   Images,
-  Layers,
   LayoutDashboard,
-  ListChecks,
   ListTodo,
   LogOut,
   Mic,
@@ -17,7 +14,6 @@ import {
   Plus,
   Shirt,
   User,
-  Video,
 } from 'lucide-react';
 import type { Client } from '../types';
 import ProductSidebar from '../pages/products/Sidebar';
@@ -61,13 +57,6 @@ export const SECTIONS: Section[] = [
           { to: '/tasks', label: '我的待办', icon: ListTodo },
         ],
       ],
-      [
-        '制作',
-        [
-          { to: '/content', label: '快捷制作', icon: Clapperboard, also: ['/studio'] },
-          { to: '/batch', label: '批量排产', icon: Layers },
-        ],
-      ],
       ['资料', [{ to: '/presets', label: '客户知识', icon: BookOpen }]],
     ],
   },
@@ -90,16 +79,17 @@ export const SECTIONS: Section[] = [
     ],
     groups: [
       [
-        '视频',
+        '成片',
         [
-          { to: '/gallery', label: '样片广场', icon: Film },
-          { to: '/queue', label: '生成任务', icon: Video },
-          { to: '/review', label: '审片交付', icon: ListChecks },
-          { to: '/analytics', label: '投放数据', icon: ChartNoAxesCombined },
+          { to: '/library', label: '全部成片', icon: Film },
         ],
       ],
       [
-        '素材',
+        '数据',
+        [{ to: '/library/import', label: '投放数据', icon: ChartNoAxesCombined }],
+      ],
+      [
+        '生产资料',
         [
           { to: '/assets', label: '全部素材', icon: Images },
           { to: '/models', label: '模特', icon: User },

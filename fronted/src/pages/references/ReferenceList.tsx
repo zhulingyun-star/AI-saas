@@ -67,7 +67,7 @@ export default function ReferenceList() {
     <div className="gy-page gy-new">
       <PageHead
         title={title}
-        description="上传一次、拆解一次，以后做视频二创可以反复用。参考视频只学结构和节奏，不放进成片。"
+        description="只学结构和节奏，不放进成片。"
       >
         <Btn variant="primary" onClick={openUpload}>
           <Plus size={14} aria-hidden="true" />
@@ -97,8 +97,7 @@ export default function ReferenceList() {
       ) : !refs.length ? (
         <Card>
           <EmptyState title="还没有参考视频" icon={<Play size={22} />}>
-            <span>上传一条想学的爆款视频，拆好镜头和台词，以后做视频二创直接拿来用。</span>
-            <Btn variant="primary" onClick={openUpload}>
+              <Btn variant="primary" onClick={openUpload}>
               <Plus size={14} aria-hidden="true" />
               上传参考视频
             </Btn>

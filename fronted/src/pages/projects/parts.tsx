@@ -62,8 +62,8 @@ export function ReferenceRow({
           {b.hasReport
             ? `${clock(b.duration)} · ${b.shotCount ?? 0} 个镜头 · ${b.lineCount ?? 0} 句台词 · 已拆解`
             : b.status === 'QUEUED' || b.status === 'RUNNING'
-              ? '拆解中，拆完才能用来做视频二创'
-              : '还没拆解，先去参考视频库拆解'}
+              ? '拆解中'
+              : '还没拆解'}
         </small>
         {lines?.map((l, i) => (
           <small key={i}>{l}</small>

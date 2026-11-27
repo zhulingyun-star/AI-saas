@@ -168,9 +168,6 @@ export default function VideoDetail() {
           <Card className="gy-pjs">
             <h3>
               基于这条再做一条
-              <small>
-                回到「{v.projectName}」的出片步，带着改法进「说一句话让 AI 改」，你看过再出
-              </small>
             </h3>
             <div className="gy-rlgrid">
               {RELAY.map(([k, t]) => {
@@ -251,8 +248,7 @@ export default function VideoDetail() {
                   复制
                 </Btn>
                 <small className="gy-fine" style={{ display: 'block' }}>
-                  按 商品_开头类型_人群_场景_时长_版本_视频编号
-                  拼的。投放时用它给素材命名，导入表格时就能自动对上。
+                  投放时用它给素材命名，导入表格时自动对上。
                 </small>
               </dd>
             </dl>

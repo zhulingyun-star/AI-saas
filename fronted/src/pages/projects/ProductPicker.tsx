@@ -312,7 +312,7 @@ export default function ProductPicker({
                   </span>
                 </button>
                 <div className="gy-rsync">
-                  保存后商品会出现在商品库对应的文件夹里，并在后台开始分析。分析完成后，在新建项目里带入商品事实。
+                  会同步到商品库并开始分析。
                 </div>
               </div>
               {err && (

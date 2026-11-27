@@ -4,19 +4,22 @@ import {
   Film,
   Flame,
   Images,
-  Layers,
-  ListChecks,
   Mic,
   Plus,
   Shirt,
   Trophy,
-  Upload,
   User,
-  Video,
 } from 'lucide-react';
 import { DIMS, useVideoLibrary } from './data';
 
-/** 资产库左栏：全部成片 / 该换新了 / 哪种赢了 / 导入投放表格，分类方式，下面是还在用的旧页面。 */
+type Item = [string, string, typeof Film, number | null];
+
+/**
+ * 资产库左栏：成片 / 分类方式 / 数据（投放数据、哪种赢了、该换新了）/ 生产资料（全部素材、模特、服装搭配、声音）。
+ * 「投放数据」进新版的导入页（/library/import）；旧的 /analytics 是另一套数据，只撤了入口，路由还在。
+ * 生产资料用现有的素材页，按类型筛好（/models、/wardrobe、/voices），页里能上传。
+ * 样片广场、生成任务、审片交付只撤了入口，路由还在。
+ */
 export default function LibrarySidebar() {
   const { videos } = useVideoLibrary();
   const { pathname } = useLocation();
@@ -25,22 +28,30 @@ export default function LibrarySidebar() {
   const by = onList ? (params.get('by') ?? '') : '';
   const tired = videos.filter((v) => v.tired.length).length;
   const filled = videos.filter((v) => v.perf).length;
-  const views: [string, string, typeof Film, number | null][] = [
-    ['/library', '全部成片', Film, videos.length],
-    ['/library/tired', '该换新了', Flame, tired],
+  const data: Item[] = [
+    ['/library/import', '投放数据', ChartNoAxesCombined, null],
     ['/library/win', '哪种赢了', Trophy, null],
-    ['/library/import', '导入投放表格', Upload, null],
+    ['/library/tired', '该换新了', Flame, tired],
   ];
-  const old: [string, string, typeof Film][] = [
-    ['/gallery', '样片广场', Layers],
-    ['/queue', '生成任务', Video],
-    ['/review', '审片交付', ListChecks],
-    ['/analytics', '旧的投放数据', ChartNoAxesCombined],
-    ['/assets', '全部素材', Images],
-    ['/models', '模特', User],
-    ['/wardrobe', '服装搭配', Shirt],
-    ['/voices', '声音', Mic],
+  const stock: Item[] = [
+    ['/assets', '全部素材', Images, null],
+    ['/models', '模特', User, null],
+    ['/wardrobe', '服装搭配', Shirt, null],
+    ['/voices', '声音', Mic, null],
   ];
+  const links = (list: Item[]) =>
+    list.map(([to, label, Icon, n]) => (
+      <Link
+        key={to}
+        to={to}
+        title={label}
+        aria-current={pathname === to || pathname.startsWith(to + '/') ? 'page' : undefined}
+      >
+        <Icon size={16} aria-hidden="true" />
+        <span className="lbl">{label}</span>
+        {n != null && <span className="n">{n}</span>}
+      </Link>
+    ));
   return (
     <>
       <Link className="gy-side-new" to="/p/new" title="新建项目">
@@ -49,20 +60,15 @@ export default function LibrarySidebar() {
       </Link>
       <nav className="gy-snav" aria-label="资产库">
         <div className="g">成片</div>
-        {views.map(([to, label, Icon, n]) => (
-          <Link
-            key={to}
-            to={to}
-            title={label}
-            aria-current={
-              (to === '/library' ? onList && !by : pathname === to) ? 'page' : undefined
-            }
-          >
-            <Icon size={16} aria-hidden="true" />
-            <span className="lbl">{label}</span>
-            {n != null && <span className="n">{n}</span>}
-          </Link>
-        ))}
+        <Link
+          to="/library"
+          title="全部成片"
+          aria-current={onList && !by ? 'page' : undefined}
+        >
+          <Film size={16} aria-hidden="true" />
+          <span className="lbl">全部成片</span>
+          <span className="n">{videos.length}</span>
+        </Link>
         <div className="g">分类方式</div>
         {DIMS.map((d) => (
           <Link
@@ -75,22 +81,14 @@ export default function LibrarySidebar() {
             <span className="lbl">{d.label}</span>
           </Link>
         ))}
-        <div className="g">以前的页面</div>
-        {old.map(([to, label, Icon]) => (
-          <Link
-            key={to}
-            to={to}
-            title={label}
-            aria-current={pathname === to || pathname.startsWith(to + '/') ? 'page' : undefined}
-          >
-            <Icon size={16} aria-hidden="true" />
-            <span className="lbl">{label}</span>
-          </Link>
-        ))}
+        <div className="g">数据</div>
+        {links(data)}
+        <div className="g">生产资料</div>
+        {links(stock)}
       </nav>
       <div className="gy-side-foot">
         <b>资产库</b>
-        {videos.length} 条成片 · {filled ? `${filled} 条填了投放数据` : '还没有投放数据'}
+        {videos.length} 条成片 · {filled ? `${filled} 条有投放数据` : '暂无投放数据'}
       </div>
     </>
   );

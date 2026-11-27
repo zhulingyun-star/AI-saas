@@ -215,7 +215,7 @@ export default function ImportPage() {
       </button>
       <PageHead
         title="导入投放表格"
-        description="把投放后台导出的素材报表（CSV）导进来，按投放用名或视频编号对上资产库里的成片，按日期追加，不会覆盖已经填的。"
+        description="导入投放后台的素材报表（CSV），按投放用名或视频编号对上成片。"
       >
         {!p && (
           <Btn onClick={template} disabled={!videos.length}>
@@ -332,7 +332,7 @@ export default function ImportPage() {
             <FileSpreadsheet size={22} aria-hidden="true" />
             <b>把 CSV 表格拖到这里，或者点这里选文件</b>
             <span className="gy-fine">
-              Excel 文件先「另存为 → CSV」；选了文件只会先预览，不会马上导入
+              Excel 文件先「另存为 → CSV」
             </span>
             <input
               ref={fileRef}

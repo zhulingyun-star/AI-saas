@@ -137,8 +137,8 @@ export function AdSummary({
         <b>{all.length ? `台词里有 ${all.length} 处可能违规的说法` : '台词检查通过'}</b>
         <small>
           {all.length
-            ? '只是提醒，不拦着你确认'
-            : '没发现极限词、治病功效、说死的承诺、没依据的价格，也没碰到商品分析里不能说的话'}
+            ? '只是提醒'
+            : '没发现可能违规的说法'}
         </small>
         {all.length > 0 && (
           <Btn size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -183,7 +183,7 @@ export function AdSummary({
   );
 }
 
-/** 15 秒、30 秒两档的转化结构骨架建议（框架模式 / 一键成片用） */
+/** 15 秒、30 秒两档的转化结构骨架建议（框架模式 / 简易用） */
 export const SKELETON: Record<number, [string, number, number][]> = {
   15: [
     ['抓住注意力', 0, 3],
@@ -223,7 +223,7 @@ export function ConvBar({
   return (
     <Card className="gy-pjs gy-cvbar">
       <h3>
-        转化结构<small>每一镜在帮观众往下单走哪一步 · 只是提示，不拦着你确认</small>
+        转化结构<small>每一镜在帮观众往下单走哪一步</small>
       </h3>
       <div
         className="gy-cvtrack"
@@ -267,8 +267,7 @@ export function ConvBar({
         )}
         {short && (
           <small className="gy-muted">
-            15 秒只查开头、给出方案、建立信任和收尾（打消顾虑 / 促进决定 /
-            推动下单有一个就行）；建立需求可以并进相邻镜头。
+            15 秒的收尾三段有一个就行。
           </small>
         )}
       </div>
@@ -360,7 +359,7 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
           revision: sb.revision,
         }),
       );
-      notify('AI 按商品写好了改成，逐镜看一遍再确认');
+      notify('AI 写好了改成');
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -391,7 +390,7 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
         </>
       }
     >
-      正在编辑分镜：改成的机位、画面和台词都能改，台词可以加减。
+      正在编辑分镜。
       {all.length > 0 && <span className="gy-adwarn">还有 {all.length} 处可能违规的说法</span>}
     </TopBar>
   ) : (
@@ -436,15 +435,15 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
       {sb.confirmed ? (
         <>
           分镜已确认 · {shots.length} 个镜头 · {shots.reduce((n, s) => n + s.lines.length, 0)}{' '}
-          句台词。改了以后要重新确认。
+          句台词。
         </>
       ) : missingVisual.length ? (
         <>
           还有 <b>{missingVisual.length} 镜</b>没写改成什么画面（镜头 {missingVisual.join('、')}
-          ），写完才能确认。
+          ）。
         </>
       ) : (
-        <>逐镜看一遍改成的画面和台词，没问题就确认。</>
+        <>逐镜看改成的画面和台词。</>
       )}
       {all.length > 0 && (
         <span className="gy-adwarn">还有 {all.length} 处可能违规的说法没处理</span>
@@ -466,7 +465,7 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
             </Btn>
           }
         >
-          可以先不管继续用；重做会按新的镜头重新开始，写过的改成会清空。
+          重做会清空写过的改成。
         </Notice>
       )}
       <AdSummary
@@ -484,7 +483,7 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
       <ConvBar shots={shots} tasks={tasks} />
       <Card className="gy-pjs">
         <h3>
-          分镜<small>左边是参考视频原来的样子，右边是改成你的商品 · 这一步不会出现成片画面</small>
+          分镜<small>左边原视频，右边改成你的商品</small>
         </h3>
         <div className="gy-sbhead" aria-hidden="true">
           <span />
@@ -653,7 +652,7 @@ export default function StepStoryboard({ flow, apply, go }: StepProps) {
                   ) : s.task ? (
                     <i className={`gy-tkb ${taskClass(s.task)}`}>{s.task}</i>
                   ) : (
-                    <em>还没标（参考视频库里也没标）</em>
+                    <em>还没标</em>
                   )}
                 </div>
               </div>

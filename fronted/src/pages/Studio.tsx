@@ -231,7 +231,7 @@ export default function Studio() {
           {stage === 0 ? (
             <>
               <h2>商品与卖点</h2>
-              {!!form.config.productAnchorId && <div className="hint">已带入商品：{String(form.config.productName)} · {Array.isArray(form.config.productAssetIds) ? form.config.productAssetIds.length : 0} 份素材。资料按创建时保存，不会随商品库修改而自动覆盖。
+              {!!form.config.productAnchorId && <div className="hint">商品：{String(form.config.productName)} · {Array.isArray(form.config.productAssetIds) ? form.config.productAssetIds.length : 0} 份素材。资料按创建时保存，不会随商品库修改而自动覆盖。
                 <Link to={`/assets?product=${form.config.productAnchorId}${campaign ? `&campaign=${campaign.id}` : ''}`}>查看商品分析</Link>
               </div>}
               <div className="form-grid">

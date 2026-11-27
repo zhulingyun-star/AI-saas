@@ -206,7 +206,7 @@ test.describe('资产库（拦截的假接口）', () => {
     await expect(cards).toHaveCount(3);
     await page.getByLabel('按审片状态筛选').selectOption('待审片');
     await expect(cards).toHaveCount(2);
-    await page.getByLabel('按创作方式筛选').selectOption('一键成片');
+    await page.getByLabel('按创作方式筛选').selectOption('简易');
     await expect(cards).toHaveCount(1);
     await page.getByLabel('按人群筛选').selectOption('通勤上班族');
     await expect(page.getByText('没有符合筛选的成片')).toBeVisible();
@@ -237,7 +237,7 @@ test.describe('资产库（拦截的假接口）', () => {
       .getByRole('navigation', { name: '资产库' })
       .getByRole('link', { name: '按方向' })
       .click();
-    await expect(page.getByRole('region', { name: '方向：二创：防晒隔离霜' })).toBeVisible();
+    await expect(page.getByRole('region', { name: '方向：复刻：防晒隔离霜' })).toBeVisible();
     await page
       .getByRole('navigation', { name: '资产库' })
       .getByRole('link', { name: '按审片状态' })
@@ -331,7 +331,7 @@ async function login(page: Page) {
   await page
     .getByLabel('密码', { exact: true })
     .fill(process.env.E2E_PASSWORD ?? 'change-me-local');
-  await page.getByRole('button', { name: '进入工作空间' }).click();
+  await page.getByRole('button', { name: '登录', exact: true }).click();
   await expect(page.getByRole('heading', { name: '全部项目', exact: true })).toBeVisible();
 }
 async function api(page: Page, method: string, url: string, data?: unknown) {

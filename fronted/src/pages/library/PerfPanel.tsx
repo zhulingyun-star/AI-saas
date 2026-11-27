@@ -168,7 +168,7 @@ export default function PerfPanel({
         <span>
           <b>{form.id ? `改 ${dateRange(d.dateFrom, d.dateTo)} 这一条` : '填一条投放数据'}</b>
           <small>
-            按天填最准，一天一条，可以多次追加；也可以填一段时间的合计（写上开始和结束日期）。数字从投放后台抄，同一条成片的日期不能重叠。
+            按天填最准；同一条成片的日期不能重叠。
           </small>
         </span>
         <span className="gy-row">
@@ -241,14 +241,6 @@ export default function PerfPanel({
           <b>还没填投放数据</b>
           {v.hasOutput ? (
             <>
-              <span>
-                这条投出去以后，把投放后台的数字填进来（或者在资产库「导入投放表格」一次导很多条）。填了以后：
-              </span>
-              <ul>
-                <li>资产库里能按点击率、转化率、投产比排序</li>
-                <li>「哪种赢了」能比较哪种开头、人群、场景跑得好</li>
-                <li>点击率往下掉、负反馈变多时，会提醒你该换新了</li>
-              </ul>
               <span className="gy-row">
                 <Btn
                   size="xs"

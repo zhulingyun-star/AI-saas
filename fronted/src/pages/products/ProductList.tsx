@@ -61,12 +61,8 @@ export default function ProductList() {
         title={title}
         description={
           <>
-            {folderObj
-              ? `文件夹 · ${inView.length} 个商品。`
-              : folder === 'pending'
-                ? '分析结果还没核对完、分析失败或还没分析的商品。'
-                : ''}
-            {client.name}的商品。一个商品一组图片，分析后核对再使用。
+            {folderObj ? `文件夹 · ${inView.length} 个商品 · ` : ''}
+            {client.name}的商品
           </>
         }
       >
@@ -96,7 +92,7 @@ export default function ProductList() {
                 nudge.info?.analysis?.stale ? '商品图片或名称改过，分析可能不准了' : '',
               ]
                 .filter(Boolean)
-                .join('，') || '看一遍分析结果，确认后就能用来做项目'}
+                .join('，') || '待核对'}
               。
             </span>
           </div>
@@ -155,7 +151,6 @@ export default function ProductList() {
       ) : !products.length ? (
         <Card>
           <EmptyState title="还没有商品" icon={<Box size={22} />}>
-            <span>上传一组商品图，填上名称，系统帮你分析商品信息。</span>
             <Btn variant="primary" onClick={() => navigate(newLink)}>
               <Plus size={14} aria-hidden="true" />
               新增商品
@@ -267,7 +262,7 @@ export default function ProductList() {
       )}
       {!isPending && !!products.length && (
         <p className="gy-goods-foot">
-          {client.name}目前有 {products.length} 个商品。点商品进入详情。
+          {client.name} · {products.length} 个商品
         </p>
       )}
     </div>

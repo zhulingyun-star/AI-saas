@@ -373,7 +373,7 @@ export default function ProductDetail() {
           </div>
         </div>
         <div className="gy-uf">
-          <span>用户痛点（推断，不是事实）</span>
+          <span>用户痛点（推断）</span>
           {editing ? (
             <div style={{ display: 'grid', gap: 6 }}>
               {listEditor('pain_points', '添加一条痛点')}
@@ -402,7 +402,7 @@ export default function ProductDetail() {
         <div className="gy-srcline">
           <span>
             {editing
-              ? '改完点保存，会记一个新的修订号'
+              ? '编辑中'
               : `人群：${report.audience || '—'} · 调性：${report.tone || '—'} · 修订 ${a?.revision ?? 0}`}
           </span>
         </div>
@@ -511,11 +511,6 @@ export default function ProductDetail() {
           running ? '正在分析商品图片' : a?.status === 'FAILED' ? '分析没有成功' : '还没有分析结果'
         }
       >
-        <span>
-          {running
-            ? '分析在后台进行，完成后这里会自动显示。'
-            : '分析会读取整组图片，整理外观、材质、卖点和需要确认的信息。'}
-        </span>
         {!running && (
           <Btn variant="primary" onClick={() => setRedo(true)}>
             <Sparkles size={14} aria-hidden="true" />
@@ -571,7 +566,7 @@ export default function ProductDetail() {
             <div className="gy-uf">
               <span>拍到了什么</span>
               {!num ? (
-                <span className="gy-muted">这张图是分析之后加的，重新分析后会有说明。</span>
+                <span className="gy-muted">分析之后加的图，还没有说明</span>
               ) : editing ? (
                 <textarea
                   className="gy-textarea"
@@ -768,12 +763,11 @@ export default function ProductDetail() {
                 title="修改 SKU"
                 onClick={() => setRenaming('sku')}
               >
-                {product.group.sku ? `SKU ${product.group.sku}` : 'SKU 未设置'}
+                {product.group.sku ? `SKU ${product.group.sku}` : '+ 加 SKU'}
               </button>
             )}
             {report?.category && <span>{report.category}</span>}
             <span>{images.length} 张图</span>
-            {a?.model && a.status !== 'EMPTY' && <span>分析模型 {a.model}</span>}
             <span>{folderPath(folders, product.folderId)}</span>
           </div>
           <div className="gy-stats3">
@@ -855,7 +849,7 @@ export default function ProductDetail() {
       {err && <Notice tone="error">{err}</Notice>}
       {a?.stale && (
         <Notice tone="warn" title="商品图片或名称改过">
-          分析结果是按之前的资料做的，可以核对后继续用，或者重新分析。
+          分析结果按之前的资料做的，可以重新分析。
         </Notice>
       )}
       {a?.status === 'FAILED' && (
@@ -867,11 +861,22 @@ export default function ProductDetail() {
         </Notice>
       )}
       {analysis.error && <Notice tone="error">{(analysis.error as Error).message}</Notice>}
+      {!needsReview(product) && pendingConfirm > 0 && (
+        <Notice
+          tone="warn"
+          title={`还有 ${pendingConfirm} 项待确认`}
+          actions={
+            <Btn size="xs" onClick={() => navigate(`/products/${anchor}/review`)}>
+              去补充
+            </Btn>
+          }
+        />
+      )}
       <Tabs tabs={TABS} value={tab} onChange={setTab} label="商品详情">
         {report &&
           (editing ? (
             <>
-              <span className="gy-muted">正在编辑，所有内容都可以改</span>
+              <span className="gy-muted">编辑中</span>
               <Btn variant="ghost" size="xs" onClick={() => setDraft(null)}>
                 取消
               </Btn>
@@ -895,8 +900,14 @@ export default function ProductDetail() {
       {tab === '商品分析' ? (
         <div style={{ display: 'grid', gap: 14 }}>
           {analysisTab}
-          <UnderstandingCard anchor={anchor} />
-          <PersonasCard anchor={anchor} />
+          <details className="gy-fold" open={needsReview(product)}>
+            <summary>商品理解</summary>
+            <UnderstandingCard anchor={anchor} />
+          </details>
+          <details className="gy-fold" open={needsReview(product)}>
+            <summary>目标人群</summary>
+            <PersonasCard anchor={anchor} />
+          </details>
           <ProductProjects anchor={anchor} />
         </div>
       ) : (
@@ -932,7 +943,7 @@ export default function ProductDetail() {
                     setAnalysis(result);
                     setRedo(false);
                     await refresh();
-                  }, '已开始分析，完成后会自动显示')
+                  }, '已开始分析')
                 }
               >
                 {a?.report ? '重新分析' : '开始分析'}
@@ -952,7 +963,6 @@ export default function ProductDetail() {
               onChange={(e) => setBrief(e.target.value)}
             />
           </Field>
-          <span className="gy-fine">分析整组图片和这段说明，视频和音频不参与。</span>
           {err && <Notice tone="error">{err}</Notice>}
         </Dialog>
       )}

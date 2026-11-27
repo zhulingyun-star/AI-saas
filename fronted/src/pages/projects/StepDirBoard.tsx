@@ -76,7 +76,7 @@ export function DirTabs({
   );
 }
 
-/** 第 3 步 分镜（框架模式每个方向一份；一键成片是自动写的那一份，可以改、不用确认） */
+/** 第 3 步 分镜（框架模式每个方向一份；简易是自动写的那一份，可以改、不用确认） */
 export default function StepDirBoard({
   flow,
   apply,
@@ -119,13 +119,10 @@ export default function StepDirBoard({
             </Btn>
           }
         >
-          {oneClick
-            ? '还没出过片：点「开始出片」时会按设置自动写方向和分镜。'
-            : '还没选方向，选好方向后每个方向写一份分镜。'}
+          {oneClick ? '还没出片。' : '还没选方向。'}
         </TopBar>
         <Card className="gy-pjs gy-lockc">
           <b>还没有分镜</b>
-          <span>{oneClick ? '出第一版时自动写' : '先在「方向」里选 1~3 个方向'}</span>
         </Card>
       </>
     );
@@ -207,7 +204,7 @@ export default function StepDirBoard({
   const nextUnconfirmed = (next: ModeFlow) =>
     pickedDirections(next).find((x) => x.id !== d.id && !x.board.confirmed);
   const confirmedCount = picked.filter((x) => x.board.confirmed).length;
-  const writer = sb.source === 'AI' ? 'AI 写的' : '本地模板拼的（不是 AI 写的）';
+  const tpl = sb.source === 'LOCAL';
 
   const bar = editing ? (
     <TopBar
@@ -232,7 +229,7 @@ export default function StepDirBoard({
         </>
       }
     >
-      正在编辑「{d.data.title}」的分镜：画面和台词都能改，台词可以加减。
+      正在编辑「{d.data.title}」的分镜。
       {nHits > 0 && <span className="gy-adwarn">还有 {nHits} 处可能违规的说法</span>}
     </TopBar>
   ) : oneClick ? (
@@ -248,8 +245,7 @@ export default function StepDirBoard({
         </>
       }
     >
-      出片时自动写的分镜（{writer}）· {shots.length}{' '}
-      个镜头。可以改，不用确认；改了以后，下次「再出一版」用改过的。
+      出片时自动写的分镜 · {shots.length} 个镜头。可以改，不用确认。
       {nHits > 0 && <span className="gy-adwarn">还有 {nHits} 处可能违规的说法没处理</span>}
     </TopBar>
   ) : (
@@ -291,14 +287,14 @@ export default function StepDirBoard({
       )}
       {sb.confirmed ? (
         <>
-          「{d.data.title}」的分镜已确认 · {shots.length} 个镜头。改了以后要重新确认。
+          「{d.data.title}」的分镜已确认 · {shots.length} 个镜头。
         </>
       ) : missing.length ? (
         <>
-          还有 <b>{missing.length} 镜</b>没写画面（镜头 {missing.join('、')}），写完才能确认。
+          还有 <b>{missing.length} 镜</b>没写画面（镜头 {missing.join('、')}）。
         </>
       ) : (
-        <>逐镜看一遍「{d.data.title}」的画面和台词，没问题就确认。</>
+        <>逐镜看「{d.data.title}」的画面和台词。</>
       )}
       {nHits > 0 && <span className="gy-adwarn">还有 {nHits} 处可能违规的说法没处理</span>}
     </TopBar>
@@ -343,12 +339,7 @@ export default function StepDirBoard({
         >
           {sb.duration !== d.data.duration
             ? `方向的时长改成了 ${d.data.duration} 秒，这份分镜还是 ${sb.duration} 秒。`
-            : '可以先不管继续用；重写会替换现在的分镜。'}
-        </Notice>
-      )}
-      {sb.source === 'LOCAL' && (
-        <Notice tone="info" title="这份分镜不是 AI 写的">
-          没有配置文字模型，画面和台词是按方向和商品理解拼的本地模板，只填了能从资料里找到的话。逐镜改成你要拍的样子。
+            : ''}
         </Notice>
       )}
       <AdSummary
@@ -361,10 +352,11 @@ export default function StepDirBoard({
       <Card className="gy-pjs">
         <h3>
           分镜
+          {tpl && <i className="gy-srctag">模板</i>}
           <small>
             按「{d.data.title}」写的 ·{' '}
             {d.data.personaName ? `给「${d.data.personaName}」看 · ` : ''}开头：
-            {d.data.hook} · {sb.duration} 秒 · {writer} · 这一步不会出现成片画面
+            {d.data.hook} · {sb.duration} 秒
           </small>
         </h3>
         {view.map((s, i) => {
@@ -507,7 +499,7 @@ export default function StepDirBoard({
                     这一镜改过了 ·{' '}
                     <Btn size="xs" variant="ghost" disabled={busy} onClick={() => restore(i)}>
                       <RotateCcw size={12} aria-hidden="true" />
-                      恢复成{sb.source === 'AI' ? ' AI ' : '本地模板'}写的原文
+                      恢复原文
                     </Btn>
                   </small>
                 )}
@@ -555,8 +547,7 @@ export default function StepDirBoard({
           }
         >
           <p>
-            会按「{d.data.title}」现在的格子和时长（{d.data.duration} 秒）重新写这份分镜，
-            {flow.aiEnabled ? '调用文字模型' : '用本地模板'}；现在写的会被替换
+            按「{d.data.title}」现在的格子和时长（{d.data.duration} 秒）重写这份分镜，现在写的会被替换
             {oneClick ? '' : '，需要重新确认'}。已经出过的版本不受影响。
           </p>
         </Dialog>

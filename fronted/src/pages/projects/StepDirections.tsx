@@ -23,7 +23,7 @@ export interface ModeStepProps {
   go: (s: Step, dir?: string) => void;
 }
 const hookTip = (h: string) => HOOK_TYPES.find(([x]) => x === h)?.[1] ?? '';
-const PRICE_NO = '商品资料里还没有价格，选这个要先去商品库补上真实价格和活动，AI 不会自己编';
+const PRICE_NO = '商品资料里没有价格，先去商品库补上';
 
 /** 一个方向卡：开头类型、前 3 秒怎么拍 / 怎么说、结构、卖点、场景和其余格子 */
 export function DirectionCard({
@@ -71,7 +71,7 @@ export function DirectionCard({
         </div>
       )}
       <span className="srcs">
-        <i className={d.source === 'AI' ? 'ai' : 'local'}>{sourceLabel(d.source)}</i>
+        {sourceLabel(d.source) && <i className="local">{sourceLabel(d.source)}</i>}
         {d.edited && <i className="ed">已改过</i>}
         {d.versionCount > 0 && <i>已出 {d.versionCount} 版</i>}
       </span>
@@ -121,8 +121,9 @@ export function DirectionCard({
             <i key={t}>{t}</i>
           ))}
       </span>
-      {x.why && <span className={`fit${d.source === 'LOCAL' ? ' local' : ''}`}>{x.why}</span>}
-      {d.productChanged && <small className="gy-adwarn">这套方向是按换商品之前的商品写的</small>}
+      {/* LOCAL 方向的 why 是后端写死的一段来历说明，不显示，只留卡片上的「模板」标签 */}
+      {x.why && d.source !== 'LOCAL' && <span className="fit">{x.why}</span>}
+      {d.productChanged && <small className="gy-adwarn">按换之前的商品写的</small>}
       {(onEdit || onRegen) && (
         <span className="gy-row acts">
           {onEdit && (
@@ -205,11 +206,11 @@ export function DirectionForm({
   return (
     <Card className="gy-pjs gy-dirform" editing>
       <h3>
-        改「{origin.title}」的格子<small>改哪格就点哪格 · 保存按钮在页面顶部</small>
+        改「{origin.title}」的格子
         {changed && (
           <Btn size="xs" variant="ghost" onClick={() => onChange({ ...origin })}>
             <RotateCcw size={12} aria-hidden="true" />
-            恢复写出来时的原文
+            恢复原文
           </Btn>
         )}
       </h3>
@@ -247,7 +248,7 @@ export function DirectionForm({
         value={`${value.duration} 秒`}
         options={o.durations.map((d) => `${d} 秒`)}
         onChange={(v) => set({ duration: parseInt(v, 10) })}
-        hint="单条最长 30 秒，分镜按 15 秒 5 镜、30 秒 7 镜来排；改了时长，分镜要按新方向重写"
+        hint="15 秒约 5 镜，30 秒约 7 镜"
       />
       <CellRow
         label="开头类型"
@@ -262,7 +263,7 @@ export function DirectionForm({
             {persona?.hooks?.length && !persona.hooks.includes(value.hook) ? (
               <em>
                 {' '}
-                · 「{persona.name}」常用的开头是 {persona.hooks.join('、')}，不换也行
+                · 「{persona.name}」常用 {persona.hooks.join('、')}
               </em>
             ) : null}
           </>
@@ -442,7 +443,7 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
           personaName: persona,
           duration,
         }),
-      flow.aiEnabled ? '出好了 3 套方向' : '按本地模板拼好了 3 套方向（不是 AI 写的）',
+      '出好了 3 套方向',
     );
   const allBoards = pick.length > 0 && pick.every((id) => byId(id)?.board.saved);
   const unchanged = pick.join(',') === savedKey;
@@ -490,7 +491,6 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
       }
     >
       正在改「{editRow?.data.title}」的格子。
-      {editRow?.board.saved && '这个方向已经有分镜了，改完以后分镜会提示按新方向重写。'}
       {editHits > 0 && <span className="gy-adwarn">开头台词还有 {editHits} 处可能违规的说法</span>}
     </TopBar>
   ) : !dirs.length ? (
@@ -502,9 +502,6 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
       }
     >
       选好给谁看和时长，出 3 套方向。
-      {flow.aiEnabled
-        ? '方向由文字模型按商品资料写。'
-        : '现在没有配置文字模型，会按商品理解拼本地模板，不是 AI 写的。'}
     </TopBar>
   ) : (
     <TopBar
@@ -527,12 +524,12 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
         <>
           已选 {pick.length} 个：
           {pick.map((id, k) => `${LETTERS[k]} ${byId(id)?.data.title ?? ''}`).join('、')}
-          {!unchanged && savedKey && '（和之前选的不一样，确认后没写过分镜的方向会补写）'}
+          {!unchanged && savedKey && '（和之前选的不一样）'}
         </>
       ) : multi ? (
-        '同时测：选 2~3 个方向，每个方向各写一份分镜、各出各的片'
+        '选 2~3 个方向'
       ) : (
-        '选一个方向；想对比测试就打开「同时测几个方向」'
+        '选一个方向'
       )}
     </TopBar>
   );
@@ -542,14 +539,9 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
     <>
       {bar}
       {err && <Notice tone="error">{err}</Notice>}
-      {!flow.aiEnabled && dirs.some((d) => d.source === 'LOCAL') && (
-        <Notice tone="info" title="这些方向不是 AI 写的">
-          没有配置文字模型，方向是按商品库里「商品理解」的卖点、痛点、场景和人群拼出来的本地模板，缺的地方空着。逐格看一遍再用。
-        </Notice>
-      )}
       <Card className="gy-pjs">
         <h3>
-          出方向前先定<small>给谁看来自商品库的目标人群 · 时长只有 15 秒和 30 秒</small>
+          出方向前先定
           <Link className="gy-link" to={`/products/${flow.product.anchorId}`}>
             去商品库改人群
           </Link>
@@ -578,7 +570,7 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
               ))}
             </span>
           ) : (
-            <span className="gy-muted">这个商品还没有人群，去商品库补上以后这里可以选。</span>
+            <span className="gy-muted">这个商品还没有人群。</span>
           )}
         </div>
         <div className="gy-cellrow">
@@ -595,12 +587,12 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
               </button>
             ))}
           </span>
-          <span className="chint">15 秒约 5 个镜头，30 秒约 7 个镜头；出好以后每套还能单独改</span>
+          <span className="chint">15 秒约 5 个镜头，30 秒约 7 个镜头</span>
         </div>
         {risks.length > 0 && (
           <div className="gy-avoid">
             <b>写方向时会避开：</b>
-            {risks.join('；')}（来自商品分析里「不能夸大的说法」）
+            {risks.join('；')}
           </div>
         )}
       </Card>
@@ -609,8 +601,7 @@ export default function StepDirections({ flow, apply, go }: ModeStepProps) {
           <h3>
             {multi ? '选 2~3 个方向同时测' : '选一个方向'}
             <small>
-              {dirs.length} 套 · {flow.aiEnabled ? '文字模型按商品写的' : '本地模板'} ·
-              每套都能改格子、单独重出
+              {dirs.length} 套
             </small>
             <label className="gy-mtog">
               <input

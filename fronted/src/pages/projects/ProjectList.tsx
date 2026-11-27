@@ -83,8 +83,7 @@ export default function ProjectList() {
         title={title}
         description={
           <>
-            {folderObj ? `文件夹 · ${inView.length} 个项目。` : ''}
-            一个项目 = 一个商品 + 一种创作方式，做出一条或几条视频。
+            {folderObj ? `文件夹 · ${inView.length} 个项目` : ''}
           </>
         }
       >
@@ -113,7 +112,6 @@ export default function ProjectList() {
       ) : !projects.length ? (
         <Card>
           <EmptyState title="还没有项目" icon={<LayoutDashboard size={22} />}>
-            <span>选一个商品和一种创作方式，就能开始做视频。</span>
             <Btn variant="primary" onClick={() => navigate(newLink)}>
               <Plus size={14} aria-hidden="true" />
               新建项目
@@ -240,7 +238,6 @@ export default function ProjectList() {
           </table>
         </Card>
       )}
-      {!isPending && !!projects.length && <p className="gy-goods-foot">点项目进入详情。</p>}
       {moving && (
         <Dialog
           title="移动到文件夹"
@@ -271,7 +268,6 @@ export default function ProjectList() {
               ))}
             </select>
           </Field>
-          <span className="gy-fine">一个项目只放在一个文件夹里。</span>
           {err && <Notice tone="error">{err}</Notice>}
         </Dialog>
       )}

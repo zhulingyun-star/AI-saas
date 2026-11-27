@@ -10,10 +10,11 @@ export type { Folder };
 
 /** 新版「项目」= 一个商品 + 一种创作方式（对应 projects 里的一行）。接口见 backend/API.md「项目（新版）」。 */
 export type Mode = 'REMAKE' | 'FRAMEWORK' | 'ONE_CLICK' | 'OTHER';
+/** 界面上的叫法：REMAKE=复刻，ONE_CLICK=简易（后端枚举值不变）；FRAMEWORK 新建页已不再提供，老项目照常显示 */
 export const MODE_LABEL: Record<Mode, string> = {
-  REMAKE: '视频二创',
+  REMAKE: '复刻',
   FRAMEWORK: '框架模式',
-  ONE_CLICK: '一键成片',
+  ONE_CLICK: '简易',
   OTHER: '快捷制作',
 };
 export const RATIOS = [
@@ -50,7 +51,7 @@ export interface ProjectItem {
   status: string;
   storyboardConfirmed: boolean;
   storyboardSaved: boolean;
-  /** 框架模式 / 一键成片：方向数、选中的方向数、选中且分镜已确认的方向数 */
+  /** 框架模式 / 简易：方向数、选中的方向数、选中且分镜已确认的方向数 */
   plan?: { directions: number; selected: number; boardsConfirmed: number };
   versions: {
     count: number;
@@ -111,9 +112,9 @@ export interface Version {
   carriedReasons: string[];
   segments: Segment[];
   verdict?: Verdict | null;
-  /** 框架模式 / 一键成片：这一版属于哪个方向 */
+  /** 框架模式 / 简易：这一版属于哪个方向 */
   directionId?: string | null;
-  /** 一键成片：出这一版时的设置 */
+  /** 简易：出这一版时的设置 */
   oneClick?: OneClickSettings | null;
   /** 项目里的总序号（框架模式的 no 是方向里的序号） */
   jobNo?: number;
@@ -199,7 +200,7 @@ export function inFolder(projects: ProjectItem[], folders: Folder[], folder: str
   const scope = folderScope(folders, folder);
   return projects.filter((p) => !!p.folderId && scope.has(p.folderId));
 }
-/** 点项目去哪：新版建的项目都进四步详情；旧流程里的框架模式 / 一键成片 / 其他作品进旧的制作页 */
+/** 点项目去哪：新版建的项目都进四步详情；旧流程里的框架模式 / 简易 / 其他作品进旧的制作页 */
 export const projectPath = (p: ProjectItem) => (p.flow ? `/p/${p.id}` : p.legacyPath);
 
 /** 列表里的「进度」，只按真实记录算 */
@@ -299,7 +300,7 @@ export function changedSegments(cur: Segment[], prev: Segment[] | undefined) {
   return cur.filter((s) => prev.find((p) => p.key === s.key)?.text !== s.text);
 }
 
-// ---------- 框架模式 / 一键成片 ----------
+// ---------- 框架模式 / 简易 ----------
 export interface DirectionData {
   title: string;
   why: string;
@@ -322,7 +323,7 @@ export interface DirectionBoard {
   saved: boolean;
   confirmed: boolean;
   revision: number;
-  /** AI / LOCAL（本地模板） */
+  /** AI / LOCAL（不是文字模型写的，界面上标「模板」） */
   source: string;
   duration: number;
   stale: boolean;
@@ -331,7 +332,7 @@ export interface DirectionBoard {
 }
 export interface DirectionRow {
   id: string;
-  /** AI：文字模型写的；LOCAL：没配置文字模型时按商品理解拼的本地模板 */
+  /** AI：文字模型写的；LOCAL：没配置文字模型时按商品理解拼的（界面上标「模板」） */
   source: 'AI' | 'LOCAL';
   data: DirectionData;
   origin: DirectionData;
@@ -375,8 +376,9 @@ export const isModeFlow = (f: BaseFlow): f is ModeFlow => 'directions' in f;
 export const pickedDirections = (f: ModeFlow) =>
   f.directions.filter((d) => d.selected).sort((a, b) => a.selectOrder - b.selectOrder);
 export const LETTERS = 'ABC';
-export const sourceLabel = (s: string) => (s === 'AI' ? 'AI 写的' : '本地模板 · 不是 AI 写的');
-/** 一键成片设置的说明（版本卡上的标签、两版的差别） */
+/** 不是文字模型写的（source=LOCAL）只打一个短标签「模板」；AI 写的不标 */
+export const sourceLabel = (s: string) => (s === 'AI' ? '' : '模板');
+/** 简易设置的说明（版本卡上的标签、两版的差别） */
 export function oneClickTags(o?: OneClickSettings | null) {
   if (!o) return [];
   return [

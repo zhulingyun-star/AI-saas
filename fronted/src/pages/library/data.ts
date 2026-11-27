@@ -154,7 +154,7 @@ export const monthOf = (iso: string) => {
 };
 export const directionLabel = (v: VideoItem) => {
   if (v.mode === 'REMAKE')
-    return v.reference ? `二创：${v.reference.name}` : '二创：参考视频不在了';
+    return v.reference ? `复刻：${v.reference.name}` : '复刻：参考视频不在了';
   if (!v.direction) return '没有方向';
   return v.direction.title || '没起名的方向';
 };
@@ -177,7 +177,7 @@ export const DIMS: {
     key: 'mode',
     label: '按创作方式',
     of: (v) => MODE_LABEL[v.mode] ?? '其他',
-    order: ['视频二创', '框架模式', '一键成片', '快捷制作'],
+    order: ['复刻', '简易', '框架模式', '快捷制作'],
   },
   { key: 'direction', label: '按方向', of: directionLabel },
   { key: 'hook', label: '按开头类型', of: hookLabel },

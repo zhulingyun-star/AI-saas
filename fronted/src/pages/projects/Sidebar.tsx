@@ -1,10 +1,10 @@
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { BookOpen, Clapperboard, LayoutDashboard, Layers, ListTodo, Plus } from 'lucide-react';
+import { BookOpen, LayoutDashboard, ListTodo, Plus } from 'lucide-react';
 import { useWorkspace } from '../../components/UI';
 import { FolderGroup } from '../../gy/folders';
 import { inFolder, useProjectLibrary, useRefreshProjects } from './data';
 
-/** 项目左栏：新建项目 + 文件夹（规则同商品库），下面是还在用的旧页面入口。 */
+/** 项目左栏：新建项目 + 文件夹（规则同商品库），下面是我的待办和客户知识。快捷制作、批量排产只撤了入口，路由还在。 */
 export default function ProjectSidebar() {
   const { client } = useWorkspace();
   const { folders, projects } = useProjectLibrary();
@@ -20,8 +20,6 @@ export default function ProjectSidebar() {
     current && current !== 'all' && current !== 'unfiled' ? `?folder=${current}` : '';
   const old: [string, string, typeof ListTodo][] = [
     ['/tasks', '我的待办', ListTodo],
-    ['/content', '快捷制作', Clapperboard],
-    ['/batch', '批量排产', Layers],
     ['/presets', '客户知识', BookOpen],
   ];
   return (

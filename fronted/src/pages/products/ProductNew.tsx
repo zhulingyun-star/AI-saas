@@ -133,7 +133,7 @@ export default function ProductNew() {
         <ChevronLeft size={14} aria-hidden="true" />
         返回商品列表
       </button>
-      <PageHead title="新增商品" description="上传一组商品图，填上名称，系统帮你分析商品信息。" />
+      <PageHead title="新增商品" />
       <input
         ref={input}
         type="file"
@@ -209,9 +209,6 @@ export default function ProductNew() {
                   </button>
                 )}
               </div>
-              <span className="gy-fine">
-                建议包含正面、侧面、细节、吊牌或包装上的文字，分析会更准。
-              </span>
             </>
           ) : (
             <button
@@ -282,7 +279,6 @@ export default function ProductNew() {
             </div>
           </div>
           <div className="gy-grow" />
-          <span className="gy-fine">分析会读取图片里的文字和商品外观，通常要等一会儿。</span>
           <Btn
             variant="primary"
             wide
@@ -327,7 +323,7 @@ export default function ProductNew() {
             ) : (
               <div className="gy-row" style={{ justifyContent: 'space-between' }}>
                 <span className="gy-fine">
-                  可以先离开，分析在后台继续，完成后会出现在「分析待核对」里。
+                  可以先离开，分析在后台继续。
                 </span>
                 {anchor && (
                   <Btn size="xs" variant="ghost" onClick={() => navigate(`/products/${anchor}`)}>

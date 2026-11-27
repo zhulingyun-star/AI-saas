@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await page
     .getByLabel('密码', { exact: true })
     .fill(process.env.E2E_PASSWORD ?? 'change-me-local');
-  await page.getByRole('button', { name: '进入工作空间' }).click();
+  await page.getByRole('button', { name: '登录', exact: true }).click();
   await expect(page.getByRole('heading', { name: '全部项目', exact: true })).toBeVisible();
 });
 

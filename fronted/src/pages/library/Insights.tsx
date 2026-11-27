@@ -43,16 +43,12 @@ export function WinView() {
     <div className="gy-page gy-new">
       <PageHead
         title="哪种赢了"
-        description="把填了投放数据的成片按一个维度分组，比平均点击率、转化率、投产比。只算真实填了数据的成片。"
+        description="按一个维度分组，比平均点击率、转化率、投产比。"
       />
       {isPending ? (
         <span className="gy-muted">正在加载…</span>
       ) : !withData.length ? (
         <EmptyState title="还没有成片填了投放数据，比不出来" icon={<Trophy size={22} />}>
-          <span>
-            资产库里的 {videos.length}{' '}
-            条成片都还没有投放数据。投放以后，在成片详情里点「填数据」，或者「导入投放表格」，这里就会按开头类型、人群、场景等分组比较。
-          </span>
           <span className="gy-row">
             <Btn variant="primary" onClick={() => navigate('/library')}>
               去给成片填数据
@@ -162,7 +158,7 @@ export function TiredView() {
     <div className="gy-page gy-new">
       <PageHead
         title="该换新了"
-        description={`按投放数据查素材有没有变累：${TIRED_RULE}。至少要 3 条有曝光的记录才判断，按天填最准。`}
+        description={`判断依据：${TIRED_RULE}。至少 3 条有曝光的记录。`}
       >
         <Btn onClick={() => navigate('/library/import')}>导入投放表格</Btn>
       </PageHead>
@@ -170,9 +166,6 @@ export function TiredView() {
         <span className="gy-muted">正在加载…</span>
       ) : !withData.length ? (
         <EmptyState title="还没有成片填了投放数据，判断不了" icon={<Flame size={22} />}>
-          <span>
-            填了投放数据（最好按天填）以后，这里会列出点击率往下掉、负反馈变多、留存太低的成片。
-          </span>
           <Btn variant="primary" onClick={() => navigate('/library')}>
             去给成片填数据
           </Btn>
@@ -180,7 +173,7 @@ export function TiredView() {
       ) : !tired.length ? (
         <EmptyState title="目前没有该换新的成片">
           <span>
-            {withData.length} 条填了数据的成片都没碰到这三个信号。记录少于 3 条的还判断不了。
+            {withData.length} 条有数据的成片都没碰到这三个信号。
           </span>
         </EmptyState>
       ) : (
@@ -196,7 +189,7 @@ export function TiredView() {
           </div>
           <p className="gy-muted">
             {tired.length} 条该换新了 · 共 {withData.length}{' '}
-            条成片填了投放数据。点开能看每个信号的具体数字，再选怎么接力。
+            条成片填了投放数据。
           </p>
         </>
       )}

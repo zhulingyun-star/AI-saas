@@ -20,12 +20,12 @@ async function login(page: Page, username = ADMIN, password = ADMIN_PW) {
   await page.goto('/');
   await page.getByLabel('账号', { exact: true }).fill(username);
   await page.getByLabel('密码', { exact: true }).fill(password);
-  await page.getByRole('button', { name: '进入工作空间' }).click();
+  await page.getByRole('button', { name: '登录', exact: true }).click();
   await expect(page.getByRole('heading', { name: '全部项目', exact: true })).toBeVisible();
 }
 async function logout(page: Page) {
   await page.getByRole('button', { name: '退出登录' }).click();
-  await expect(page.getByRole('button', { name: '进入工作空间' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible();
 }
 async function api(page: Page, method: string, url: string, data?: unknown, ok = true) {
   const { token } = await (await page.request.get('/api/auth/csrf')).json();
@@ -247,7 +247,7 @@ test.describe('团队管理（本机开发后端）', () => {
     await logout(page);
     await page.getByLabel('账号', { exact: true }).fill(username);
     await page.getByLabel('密码', { exact: true }).fill(pw);
-    await page.getByRole('button', { name: '进入工作空间' }).click();
+    await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page.getByText('账号或密码错误')).toBeVisible();
   });
 
