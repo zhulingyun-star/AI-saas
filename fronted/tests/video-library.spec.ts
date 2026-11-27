@@ -478,7 +478,7 @@ test.describe('资产库（本机开发后端）', () => {
     await expect(bar).toContainText('4 行有问题');
     await expect(bar).toContainText('1 行没对上');
     await expect(page.getByLabel('「曝光」用表格里的哪一列')).toHaveValue('3');
-    await expect(page.getByLabel('「投产比」用表格里的哪一列')).toHaveValue('7');
+    await expect(page.getByLabel('「支付 ROI」用表格里的哪一列')).toHaveValue('7');
     await expect(page.getByText(/没用上的列：点击率/)).toBeVisible();
     await expect(page.getByRole('row', { name: '第 2 行' })).toContainText('按投放用名对上');
     await expect(page.getByRole('row', { name: '第 3 行' })).toContainText('按视频编号对上');
@@ -523,9 +523,10 @@ test.describe('资产库（本机开发后端）', () => {
     await expect(card.locator('.gy-pftiles')).toContainText('10,000');
     await expect(card.locator('.gy-pftiles')).toContainText('2.10');
     await shot(page, '12-detail-imported-real.png');
-    // 哪种赢了：只有这一条有数据，比不出来，但会显示真实数字
+    // 哪种赢了（旧地址跳到投流看板里）：按真实数据分组，有一句话的结论
     await page.goto('/library/win');
-    await expect(page.getByRole('status').filter({ hasText: '只有「' })).toBeVisible();
+    await expect(page).toHaveURL(/\/library\/data\/win/);
+    await expect(page.locator('.gy-winsay')).not.toBeEmpty();
     await shot(page, '13-win-real-one-video.png');
     await realVideos(page); // 清掉
   });

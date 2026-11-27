@@ -209,12 +209,44 @@ duration 5–60 秒，最多 20 镜，每镜 1–60 秒；镜头非空时，总�
 - 「哪种赢了」在前端按列表里每条成片的累计分组：每条先算自己的累计，再在组里取平均（每条分量一样），少于 3 条的分组标“样本太少”。不做出价、预算、预测或打分。
 - 新表：`job_performance`（一条投放记录：成片、起止日期、各项数字、备注、来源 MANUAL/IMPORT、导入批次、revision、谁改的）、`performance_imports`（每次导入：文件名、行数、导入 / 跳过 / 有问题的行数、谁导的）。
 
+## 投流数据回流（V14）
+
+按《投流数据回流模块 PRD v1.0》实现，和 PRD 的出入：PRD 里的 asset 指成片（`jobs` 一行），不是 `assets` 表；PRD 的 `campaign_materials` 没有另建，**合并进 V12 的 `job_performance`**（加列），投放数据只存这一处，手填、旧模板导入、千川导入共用；「客户空间」= `clients`；接口都在 `/api/clients/{clientId}` 下（PRD 写的是 `/api/analytics`），沿用 `Store.access`（进不去 404）和 `RoleGuard`（改不了 403）。系统**不调用千川接口、不执行任何投放操作**；所有数字只来自导入或手填，没有就是 null，不估算、不预测。比例一律是百分数（0–100），金额是元（PRD 示例里的 0.12 这类小数写法这里是 12）。
+
+**成片命名（F1）** `{YYMMDD}-{商品简称}-{内容形式}-{创作者}-V{版本}`，校验 `^\d{6}-[^-]{2,10}-(图文|短视频|直播切片)-[^-]{2,10}-V\d{1,2}$`。日期 = 成片生成那天（北京时间）；商品简称 = 商品库商品名去掉空白和横线、截到 10 个字（商品库还没有单独的简称字段）；内容形式默认「短视频」；创作者 = 出片人的显示名（V13 `display_name`，空就用账号），去横线、截到 10 个字；同一天 + 同一商品简称 + 同一创作者的版本从 V1 递增。新出的版本把出片人记在 `jobs.created_by`；以前的版本按操作记录里同一时刻（±10 秒）的「出片 / 提交制作 / 提交一键成片」补。补不出来（商品不在了、不知道是谁出的、名字不到 2 个字）就不生成，`standardName` 为空、`naming.problem` 写原因，界面写「未规范化」。资产库列表、详情、导入前会先把还没命名的出好的成片补上（`NamingService.ensure`）。同一客户里命名唯一。
+
+| 接口 | 请求与语义 |
+| --- | --- |
+| GET `/video-library`、`/video-library/{jobId}` | 每条成片多了 `standardName` 和 `naming:{standardName,date,productShort,form,creator,version,problem,revision}`；`perf`（累计）多了 `cost,gmv,netGmv,netOrders,netRoi,netSettleRate,refundRate1h`，没有曝光的记录不再按 0 算（`impressions`/`clicks` 可能不出现）；`records` 多了 `cost,gmv,refundGmv,refundOrders,netGmv,netOrders,refundRate1h,coupon,accountId,materialId,materialName`。`roi`：有消耗的记录按消耗加权（= 成交 ÷ 消耗），一条消耗都没有时照旧按曝光加权 |
+| PUT `/jobs/{jobId}/naming` | `{productShort,form,version?,revision}` 只能改商品简称（2–10 字、不能有横线）、内容形式（图文 / 短视频 / 直播切片）和版本（1–99，不传取下一个空着的）；日期和创作者不能改；名字和别的成片重复 400；revision 过期 409。返回成片详情。只读 403 |
+| POST / PUT `/jobs/{jobId}/performance` | 多了 `cost,gmv,refundGmv,refundOrders,refundRate1h,coupon`；曝光、点击和消耗、成交金额至少填一组（填了曝光就要填点击）；退款金额 ≤ 成交金额，退款订单 ≤ 成交订单；净成交 = 成交 − 退款（两项都有才算） |
+| GET `/jobs/{jobId}/campaign-stats` | 资产库详情的「投放表现」：`{hasData}`；有千川数据时再给 `summary`（同下面的看板字段）、`trend:[{date,netRoi,cost,netGmv}]`（截至最后一天有数据的日期往前 7 天，只用按天的记录，没数据的天为 null）、`through` |
+| GET `/analytics/overview` | `{pendingSuggestions,accounts,hasData,from,to}`（左栏角标） |
+| GET `/analytics/accounts?start&end` | 千川账户（不含已删除）+ 每个账户的看板数字：`{items:[{id,name,advertiserId,status:ACTIVE/PAUSED,clientId,clientName,createdAt,createdBy,revision,materialCount,totalCost,netGmv,netRoi,refundRate1h,…}]}` |
+| POST `/analytics/accounts` | `{name,advertiserId}`；广告主 ID 6–30 位数字；同一团队（同一主账号名下的客户）里已有同一个广告主 ID 409；这个客户里删过的同 ID 账户会恢复（数据还挂在上面） |
+| PUT `/analytics/accounts/{id}` | `{name,advertiserId,status?,revision}`；状态 ACTIVE / PAUSED（停用后不能再选来导入）；导入过数据的账户不能改广告主 ID；409 同上 |
+| DELETE `/analytics/accounts/{id}?revision=N` | 没数据真删；有数据只标记 `DELETED`（数据保留，看板照常统计）。返回 `{id,kept}` |
+| POST `/analytics/import/preview`、`/analytics/import/confirm` | 和 `/performance-imports/preview`、`/performance-imports` 是同一套（旧地址保留），请求多了 `accountId?,rangeFrom?,rangeTo?`。表里没有日期列时按选的日期范围导入；有日期列时超出范围的行算错误行。表里有素材 ID 列时必须选账户。必需的列：素材名称 / 视频编号 / 素材 ID 至少一个，日期（或日期范围），曝光 + 点击或消耗 / 成交金额。新字段 `materialId,cost,gmv,refundGmv,refundOrders,refundRate1h,coupon`；表头怎么认由 `application.yml` 的 `app.performance-import.columns.<字段>` 配置（逗号分隔，忽略大小写、空格、横线、下划线和括号里的单位），默认按 PRD 的千川「素材分析」报表列名。对成片顺序：同一账户导过的素材 ID → 标准命名完全一致（`STANDARD`）→ 表里名字是标准命名加了后缀（`STANDARD_PREFIX`，取最长的，后面紧跟数字的不算，V1 不会吃掉 V12）→ 表里名字是标准命名的前一截、至少到商品简称（`STANDARD_REVERSE`）→ 旧的投放用名（`NAME`）→ 视频编号（`CODE`）→ 名字最后一段是视频编号（`NAME_CODE`）→ 手动指认（`MANUAL`，也可以改掉自动对上的）；候选不止一条就要手动指认。**幂等**：同一账户 + 同一素材 ID + 同一天（同一段日期）已经有记录时这一行是更新（`rows[].update=true`，`counts.update`），确认后 `UPDATE` 那一条（数据库唯一约束 `account_id, material_id, date_from, date_to`）；同一个文件里同一素材同一天写两遍算错误行。日期重叠规则：同一条成片的记录不能重叠，例外是两条都来自千川、但账户或素材不同（同一条成片投了好几个素材）。确认返回 `{importId,imported,updated,skipped,videos,suggestions,errors}`，导完自动扫一遍投放建议 |
+| GET `/analytics/materials?start&end&accountId&product&creator&job&sort&order&page&size` | 素材看板：`{summary,items,total,page,pageSize,sort,order,filter,options:{accounts,products,creators}}`。`items[]`：`jobId,standardName,title,productId,productName,coverId,creator,netRoi,netGmv,netOrders,netSettleRate,refundRate1h,overallRoi,totalGmv,totalCost,totalOrders,coupon,dataDays,from,to`。`sort` 可选 `netRoi,netGmv,netOrders,netSettleRate,refundRate1h,overallRoi,totalGmv,totalCost,dataDays,standardName,lastDay`，默认 `netGmv` 降序，空值排最后；每页默认 50（最多 500）。只算有消耗或成交金额的记录；日期筛选按记录整段落在范围内；`product` 是商品 anchorId，`creator` 是出片人账号，`job` 是单条成片 |
+| GET `/analytics/summary?…` | 汇总卡（同筛选）：`totalCost,netGmv,netOrders,avgNetRoi(=Σ净成交÷Σ消耗),avgRefundRate1h(记录平均),materialCount,totalGmv,overallRoi,netSettleRate,from,to` |
+| GET `/analytics/materials/export?…` | 同筛选、同排序的全部行（最多 2 万）导出 CSV，UTF-8 带 BOM，13 列（素材命名、成片、商品、创作者 + 12 列里的 9 个数字列）；以 `= + - @` 开头的文字前面加 `'` |
+| GET `/analytics/products?start&end&accountId&creator` | 商品看板只有 `productId,productName,coverId,materialCount,netGmv`，**不给商品级消耗和 ROI**（混了不是本系统做的素材） |
+| GET `/analytics/products/export`、`/analytics/accounts/export` | 同上导出 |
+| GET `/analytics/suggestions?status=PENDING|ACCEPTED|REJECTED|DONE|ALL` | `{items:[{id,ruleKey,ruleName,type:STOP|INCREASE_BUDGET|ITERATE|CHECK,typeLabel,reason,snapshot,dataThrough,status,revision,createdAt,decidedAt,decidedBy,job:{id,standardName,title,productName,coverId}}],counts:{pending,accepted,rejected,done}}`，最多 500 条，待处理在前 |
+| POST `/analytics/suggestions/{id}/decide` | `{action:accepted|rejected|done,revision}`。PENDING → ACCEPTED / REJECTED / DONE；ACCEPTED → DONE；其余 400；revision 过期 409。只记录谁、什么时候做了什么决定 |
+| POST `/analytics/suggestions/scan` | 立即扫一遍，返回 `{created}` |
+| GET `/analytics/suggestion-rules`、PUT `/analytics/suggestion-rules/{key}` | 四条规则：`HIGH_REFUND` 高退款预警（1 小时退款率 > 30% 且累计消耗 > 100 元 → 建议停投）、`HIGH_ROI` 高 ROI 加码（净 ROI ≥ 3、净订单 ≥ 10、数据 ≥ 3 天 → 建议加预算）、`LOW_ROI` 低效止损（净 ROI < 1 且累计消耗 > 500 元 → 建议停投迭代）、`LOW_SETTLE` 结算率异常（净结算率 < 50% → 建议检查），默认都启用。PUT `{enabled,params?,revision}` 改启停和阈值（比例 0–100） |
+
+- 建议怎么提：按每条成片的累计数字（所有账户、全部日期）判断；数字不够判断（比如没有退款率）就不提。同一条成片同一条规则：还有待处理的就更新它的数据；处理过的要等数据截至日期变了才会再提。触发：导入完成后 + 每天北京时间 7:30（`app.suggestions.cron`，复用已有的 `@EnableScheduling`，设成 `-` 关掉）。文案一律「建议…」，不出现「自动…」。
+- 角色（`RoleGuard`，后端拦）：导入、千川账户管理、处理建议、改规则（`/analytics/**` 的修改）= 管理员 / 客户负责人 / 投手；内容制作和只读 403；看板、导出所有角色都能看。改命名：只读不能改，其他角色能改。
+- 新表 / 列：`jobs.created_by`；`job_names`（命名）；`qianchuan_accounts`；`job_performance` 加 `account_id,material_id,material_name,cost,gmv,refund_gmv,refund_orders,net_gmv,net_orders,refund_rate_1h,coupon`，`impressions/clicks` 改为可空，唯一索引 `(account_id,material_id,date_from,date_to)`；`performance_imports` 加 `account_id,range_from,range_to,updated_rows`；`suggestion_rules`（按客户存启停和阈值）、`campaign_suggestions`。旧的 `job_performance` 记录原样保留，新列为空。旧的 `metrics` 表和 `/analytics` 旧页不动。
+
 ## 团队管理（V13）
 
 一支团队 = 一个主账号（部署时用 `ADMIN_USERNAME` 建的账号，`app_users.team_owner` 指向它）和它开通的账号；团队的客户就是主账号名下的客户。已有账号迁移后都是自己团队的主账号 + 管理员，原来的访问范围不变。
 
 - 能进哪些客户（`Store.access`，所有 `/clients/{clientId}` 接口都走它）：主账号自己的客户；同团队的管理员能进全部；其他角色只能进 `client_members` 里分给他的客户。停用的账号哪里都进不去，进不去统一 404。
-- 角色：`ADMIN` 管理员、`LEAD` 客户负责人、`BUYER` 投手、`MAKER` 内容制作、`VIEWER` 只读。客户空间里的修改操作（非 GET）按角色拦（`RoleGuard`，403 + 中文原因）：只读什么都不能改；内容制作不能审片（`/jobs/{id}/verdict`、`/jobs/{id}/reviews`）、不能填或导入投放数据（`/jobs/{id}/performance*`、`/performance-imports*`、`/metrics/import`）、不能改客户知识（`/presets*`）；投手不能改客户知识。
+- 角色：`ADMIN` 管理员、`LEAD` 客户负责人、`BUYER` 投手、`MAKER` 内容制作、`VIEWER` 只读。客户空间里的修改操作（非 GET）按角色拦（`RoleGuard`，403 + 中文原因）：只读什么都不能改；内容制作不能审片（`/jobs/{id}/verdict`、`/jobs/{id}/reviews`）、不能填或导入投放数据（`/jobs/{id}/performance*`、`/performance-imports*`、`/metrics/import`）、不能做 `/analytics/**` 的修改（导入、千川账户、投放建议）、不能改客户知识（`/presets*`）；投手不能改客户知识。
 - 状态：`PENDING` 待首次登录（第一次登录成功后变 `ACTIVE`）、`ACTIVE` 正常、`DISABLED` 已停用（登录返回 401「账号或密码错误」）。
 - 密码：管理员开通或重设时设定，至少 12 位、不超过 72 字节、不能和登录账号一样；只存 BCrypt 摘要，任何接口都不返回，操作记录里也不写。
 

@@ -64,7 +64,7 @@ export default function VideoList() {
       filters.every(([k, , , of]) => !get(k) || of(v) === get(k)) &&
       (!get('perf') || !!v.perf) &&
       (!q ||
-        `${videoName(v)} ${v.product?.name ?? ''} ${v.hook} ${v.personaName} ${v.scene} ${v.direction?.title ?? ''} ${v.code} ${v.adName}`
+        `${videoName(v)} ${v.product?.name ?? ''} ${v.hook} ${v.personaName} ${v.scene} ${v.direction?.title ?? ''} ${v.code} ${v.adName} ${v.standardName ?? ''}`
           .toLowerCase()
           .includes(q)),
   );
@@ -89,7 +89,7 @@ export default function VideoList() {
         title={by ? `全部成片 · ${by.label}分组` : '全部成片'}
         description="项目里出好的每一版。"
       >
-        <Btn onClick={() => navigate('/library/import')}>
+        <Btn onClick={() => navigate('/library/data/import')}>
           <Upload size={14} aria-hidden="true" />
           导入投放表格
         </Btn>
@@ -141,7 +141,7 @@ export default function VideoList() {
         </label>
         <SearchBox
           label="搜索成片"
-          placeholder="搜项目、商品、开头、人群或视频编号"
+          placeholder="搜项目、商品、命名、开头、人群或视频编号"
           value={get('q')}
           onChange={(v) => set('q', v)}
         />
@@ -151,9 +151,7 @@ export default function VideoList() {
         <span className="gy-muted">正在加载成片…</span>
       ) : !videos.length ? (
         <EmptyState title="还没有出好的成片" icon={<Film size={22} />}>
-          <span>
-            {pending ? `现在有 ${pending} 版还没出好或没出成功，在各自的项目里看。` : ''}
-          </span>
+          <span>{pending ? `现在有 ${pending} 版还没出好或没出成功，在各自的项目里看。` : ''}</span>
           <Btn variant="primary" onClick={() => navigate('/')}>
             去项目
           </Btn>
@@ -188,8 +186,7 @@ export default function VideoList() {
       {videos.length > 0 && (
         <p className="gy-muted gy-libfoot">
           共 {videos.length} 条成片{rows.length !== videos.length ? `，筛出 ${rows.length} 条` : ''}
-          ；{filled ? `${filled} 条填了投放数据` : '还没有成片填投放数据'}
-          。
+          ；{filled ? `${filled} 条填了投放数据` : '还没有成片填投放数据'}。
           {pending ? ` 另有 ${pending} 版还没出好或没出成功。` : ''}
         </p>
       )}

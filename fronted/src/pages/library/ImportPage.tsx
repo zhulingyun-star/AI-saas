@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Download, FileSpreadsheet } from 'lucide-react';
 import { post, request } from '../../api';
@@ -8,19 +8,30 @@ import { Btn, Card, Chip, Notice, PageHead } from '../../gy/ui';
 import { TopBar } from '../projects/parts';
 import { shortTime } from '../projects/data';
 import { fmtN, useRefreshVideos, useVideoLibrary } from './data';
+import { useAccounts, useRefreshAnalytics, yuan } from './campaign';
+import { todayCN } from './PerfPanel';
 
 interface PreviewRow {
   row: number;
   name: string;
   code: string;
+  materialId?: string;
+  update?: boolean;
   dateFrom: string;
   dateTo: string;
   values: Record<string, number | null>;
   status: 'OK' | 'ERROR' | 'UNMATCHED' | 'SKIPPED';
   by: string;
   jobId?: string | null;
-  video?: { id: string; projectName: string; no: number; code: string } | null;
+  video?: VideoBrief | null;
   messages: string[];
+}
+interface VideoBrief {
+  id: string;
+  projectName: string;
+  no: number;
+  code: string;
+  standardName?: string | null;
 }
 interface Preview {
   fileName: string;
@@ -31,16 +42,25 @@ interface Preview {
   sample: string[][];
   totalRows: number;
   rows: PreviewRow[];
-  counts: { ok: number; error: number; unmatched: number; skipped: number };
-  videos: { id: string; projectName: string; no: number; code: string }[];
+  counts: { ok: number; error: number; unmatched: number; skipped: number; update: number };
+  videos: VideoBrief[];
+  account?: { id: string; name: string; advertiserId: string } | null;
+  rangeFrom?: string | null;
+  rangeTo?: string | null;
 }
 interface Result {
   imported: number;
+  updated: number;
+  suggestions: number;
   skipped: number;
   videos: number;
   errors: { row: number; name: string; messages: string[] }[];
 }
 const BY: Record<string, string> = {
+  MATERIAL_ID: '按素材 ID 对上（导过）',
+  STANDARD: '按命名对上',
+  STANDARD_PREFIX: '按命名对上（带后缀）',
+  STANDARD_REVERSE: '按命名开头对上',
   NAME: '按投放用名对上',
   CODE: '按视频编号对上',
   NAME_CODE: '按名字里的视频编号对上',
@@ -53,9 +73,15 @@ const STATUS: Record<PreviewRow['status'], [string, string]> = {
   SKIPPED: ['跳过', 'idle'],
 };
 const TEMPLATE_HEAD = [
-  '投放用名',
+  '素材名称',
   '视频编号',
   '日期',
+  '消耗',
+  '成交金额',
+  '成交订单数',
+  '退款金额',
+  '退款订单数',
+  '1小时退款率',
   '曝光',
   '点击',
   '3秒留存',
@@ -84,6 +110,12 @@ export default function ImportPage() {
   const navigate = useNavigate();
   const refresh = useRefreshVideos();
   const { videos } = useVideoLibrary();
+  const refreshAnalytics = useRefreshAnalytics();
+  const accounts = useAccounts();
+  const activeAccounts = (accounts.data?.items ?? []).filter((a) => a.status === 'ACTIVE');
+  const [accountId, setAccountId] = useState('');
+  const [range, setRange] = useState({ from: '', to: '' });
+  const [find, setFind] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [mapping, setMapping] = useState<Record<string, number> | null>(null);
@@ -102,10 +134,14 @@ export default function ImportPage() {
           fileName: string;
           totalRows: number;
           imported: number;
+          updated?: number;
           skipped: number;
           errors: number;
           by: string;
           at: string;
+          account?: string | null;
+          rangeFrom?: string | null;
+          rangeTo?: string | null;
         }[]
       >(`/clients/${client.id}/performance-imports`),
   });
@@ -114,15 +150,20 @@ export default function ImportPage() {
     body: { name: string; text: string },
     map: Record<string, number> | null,
     asg: Record<string, string>,
+    acc = accountId,
+    rg = range,
   ) => {
     setBusy(true);
     setErr('');
     try {
-      const p = await post<Preview>(`/clients/${client.id}/performance-imports/preview`, {
+      const p = await post<Preview>(`/clients/${client.id}/analytics/import/preview`, {
         fileName: body.name,
         text: body.text,
         mapping: map,
         assign: asg,
+        accountId: acc || null,
+        rangeFrom: rg.from || null,
+        rangeTo: rg.to || rg.from || null,
       });
       setPreview(p);
       setMapping(p.mapping);
@@ -163,17 +204,21 @@ export default function ImportPage() {
     setBusy(true);
     setErr('');
     try {
-      const r = await post<Result>(`/clients/${client.id}/performance-imports`, {
+      const r = await post<Result>(`/clients/${client.id}/analytics/import/confirm`, {
         fileName: file.name,
         text: file.text,
         mapping,
         assign,
+        accountId: accountId || null,
+        rangeFrom: range.from || null,
+        rangeTo: range.to || range.from || null,
         confirmed: true,
       });
       setResult(r);
       setPreview(null);
       setFile(null);
       await refresh();
+      await refreshAnalytics();
       await history.refetch();
       notify(`已导入 ${r.imported} 行投放数据`);
     } catch (e) {
@@ -187,7 +232,9 @@ export default function ImportPage() {
     const lines = [
       TEMPLATE_HEAD.join(','),
       ...videos.map(
-        (v) => [v.adName, v.code].map(esc).join(',') + ','.repeat(TEMPLATE_HEAD.length - 2),
+        (v) =>
+          [v.standardName ?? v.adName, v.code].map(esc).join(',') +
+          ','.repeat(TEMPLATE_HEAD.length - 2),
       ),
     ];
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -205,7 +252,25 @@ export default function ImportPage() {
         show === 'all' ? true : show === 'ok' ? r.status === 'OK' : r.status !== 'OK',
       )
     : [];
-  const fmtCell = (r: PreviewRow) => `${fmtN(r.values.impressions)} / ${fmtN(r.values.clicks)}`;
+  const money = !!p && ('cost' in p.mapping || 'gmv' in p.mapping);
+  const fmtCell = (r: PreviewRow) =>
+    money
+      ? `${yuan(r.values.cost)} / ${yuan(r.values.gmv)}`
+      : `${fmtN(r.values.impressions)} / ${fmtN(r.values.clicks)}`;
+  const options = (p?.videos ?? []).filter(
+    (v) =>
+      !find.trim() ||
+      `${v.standardName ?? ''} ${v.projectName} ${v.code}`
+        .toLowerCase()
+        .includes(find.trim().toLowerCase()),
+  );
+  const vLabel = (v: VideoBrief) =>
+    v.standardName
+      ? `${v.standardName}（${v.code}）`
+      : `${v.projectName} · 第 ${v.no} 版（${v.code}）`;
+  const reRun = (acc: string, rg: { from: string; to: string }) => {
+    if (file) void run(file, mapping, assign, acc, rg);
+  };
 
   return (
     <div className="gy-page gy-new">
@@ -215,7 +280,7 @@ export default function ImportPage() {
       </button>
       <PageHead
         title="导入投放表格"
-        description="导入投放后台的素材报表（CSV），按投放用名或视频编号对上成片。"
+        description="导入千川素材报表（CSV），按成片命名对上。同一素材同一天再导会更新。"
       >
         {!p && (
           <Btn onClick={template} disabled={!videos.length}>
@@ -243,6 +308,7 @@ export default function ImportPage() {
           }
         >
           <b>{p.fileName}</b> · {p.totalRows} 行 · 能导入 {p.counts.ok} 行
+          {p.counts.update ? `（其中更新 ${p.counts.update} 行）` : ''}
           {p.counts.error ? ` · ${p.counts.error} 行有问题（不导入，下面写了原因）` : ''}
           {p.counts.skipped ? ` · 跳过 ${p.counts.skipped} 行` : ''}
           {p.missing.length ? (
@@ -252,15 +318,89 @@ export default function ImportPage() {
           ) : null}
         </TopBar>
       )}
+      <Card className="gy-pjs gy-impset" aria-label="导入设置">
+        <div className="gy-impsetrow">
+          <label>
+            <span>千川账户</span>
+            <select
+              className="gy-select"
+              aria-label="千川账户"
+              value={accountId}
+              disabled={busy}
+              onChange={(e) => {
+                setAccountId(e.target.value);
+                reRun(e.target.value, range);
+              }}
+            >
+              <option value="">不选（自己的表格）</option>
+              {activeAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}（{a.advertiserId}）
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>数据日期</span>
+            <span className="gy-row">
+              <input
+                className="gy-input"
+                type="date"
+                aria-label="数据开始日期"
+                max={todayCN()}
+                value={range.from}
+                disabled={busy}
+                onChange={(e) => {
+                  const next = { ...range, from: e.target.value };
+                  setRange(next);
+                  reRun(accountId, next);
+                }}
+              />
+              <span aria-hidden="true">至</span>
+              <input
+                className="gy-input"
+                type="date"
+                aria-label="数据结束日期"
+                min={range.from || undefined}
+                max={todayCN()}
+                value={range.to}
+                disabled={busy}
+                onChange={(e) => {
+                  const next = { ...range, to: e.target.value };
+                  setRange(next);
+                  reRun(accountId, next);
+                }}
+              />
+            </span>
+          </label>
+        </div>
+        <span className="gy-fine">
+          {activeAccounts.length ? (
+            '千川报表选账户；表里没有日期列时，按这里的日期导入。'
+          ) : (
+            <>
+              还没有千川账户，<Link to="/library/data/accounts?view=manage">先添加</Link>
+              。自己的表格可以不选。
+            </>
+          )}
+        </span>
+      </Card>
       {err && <Notice tone="error">{err}</Notice>}
       {result && (
         <Notice
           tone="success"
-          title={`已导入 ${result.imported} 行，对应 ${result.videos} 条成片${result.skipped ? `，跳过 ${result.skipped} 行` : ''}`}
+          title={`已导入 ${result.imported} 行${result.updated ? `，更新 ${result.updated} 行` : ''}，对应 ${result.videos} 条成片${result.skipped ? `，跳过 ${result.skipped} 行` : ''}`}
           actions={
-            <Btn size="xs" variant="primary" onClick={() => navigate('/library?perf=1')}>
-              去看填了数据的成片
-            </Btn>
+            <>
+              <Btn size="xs" variant="primary" onClick={() => navigate('/library/data/materials')}>
+                看投流看板
+              </Btn>
+              {result.suggestions > 0 && (
+                <Btn size="xs" onClick={() => navigate('/library/data/suggestions')}>
+                  {result.suggestions} 条新建议
+                </Btn>
+              )}
+            </>
           }
         >
           {result.errors.length ? (
@@ -282,23 +422,26 @@ export default function ImportPage() {
           <Card className="gy-pjs">
             <h3>表格里要有这些列</h3>
             <div className="gy-impcols">
-              <span className="key">投放用名或视频编号（至少一个）</span>
-              <span className="key">日期（一天，或「2026-11-15 至 2026-11-21」一段）</span>
-              <span className="key">曝光</span>
-              <span className="key">点击</span>
+              <span className="key">素材名称、视频编号或素材 ID（至少一个）</span>
+              <span className="key">日期（或在上面选日期）</span>
+              <span className="key">消耗、成交金额，或曝光、点击</span>
               {[
+                '成交订单数',
+                '支付 ROI',
+                '退款金额',
+                '退款订单数',
+                '1 小时退款率',
+                '智能优惠券',
                 '3 秒留存',
                 '完播率',
                 '商品点击',
-                '成交单数',
                 '千次曝光成交额',
-                '投产比',
                 '负反馈率',
                 '备注',
               ].map((c) => (
                 <span key={c}>{c}</span>
               ))}
-              <span className="auto">点击率、转化率不用填，自动算</span>
+              <span className="auto">净成交、净 ROI、点击率不用填，自动算</span>
             </div>
             <span className="gy-fine">
               列名不一样也能认（比如「展示数」「素材名称」「消耗回报率」），认不出来的可以在下一步手动对。百分比写
@@ -307,18 +450,17 @@ export default function ImportPage() {
             <h3>怎么对上是哪条成片</h3>
             <ol className="gy-implist">
               <li>
-                先按「投放用名」对：成片详情里能一键复制，最后一段是视频编号，例如{' '}
-                {videos[0] ? (
-                  <code className="gy-adnm">{videos[0].adName}</code>
-                ) : (
-                  '新百伦鞋子_对比型_通勤上班族_通勤路上_15秒_v1_ab12cd34'
-                )}
+                先按成片命名对：卡片上点「复制命名」，上传千川时用它命名，例如{' '}
+                <code className="gy-adnm">
+                  {videos.find((v) => v.standardName)?.standardName ??
+                    '251126-儿童家居服-短视频-欣怡-V1'}
+                </code>
+                ；千川加了后缀、或名字只剩前一截也能对上
               </li>
-              <li>
-                对不上再按「视频编号」对（成片详情里能看到）；名字改过但最后还带着编号的也能对上
-              </li>
-              <li>都对不上的行，要你手动指认是哪条成片，或者跳过</li>
-              <li>同一条成片的日期不能重叠：已经填过的那几天不会重复导入，会在预览里写明</li>
+              <li>导过的素材 ID 会记住是哪条成片</li>
+              <li>再按旧的投放用名、视频编号对</li>
+              <li>都对不上的行，手动指认或跳过</li>
+              <li>同一账户、同一素材、同一天再导入就更新那一条，不重复</li>
             </ol>
           </Card>
           <label
@@ -331,9 +473,7 @@ export default function ImportPage() {
           >
             <FileSpreadsheet size={22} aria-hidden="true" />
             <b>把 CSV 表格拖到这里，或者点这里选文件</b>
-            <span className="gy-fine">
-              Excel 文件先「另存为 → CSV」
-            </span>
+            <span className="gy-fine">Excel 文件先「另存为 → CSV」</span>
             <input
               ref={fileRef}
               type="file"
@@ -348,30 +488,36 @@ export default function ImportPage() {
               <h3>
                 最近导入<small>最多显示 20 次</small>
               </h3>
-              <table className="gy-imptbl">
-                <thead>
-                  <tr>
-                    <th>文件</th>
-                    <th>时间</th>
-                    <th>导入</th>
-                    <th>跳过</th>
-                    <th>有问题</th>
-                    <th>谁导的</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.data.map((h) => (
-                    <tr key={h.id}>
-                      <td>{h.fileName}</td>
-                      <td>{shortTime(h.at)}</td>
-                      <td>{h.imported} 行</td>
-                      <td>{h.skipped} 行</td>
-                      <td>{h.errors} 行</td>
-                      <td>{h.by}</td>
+              <div className="gy-imptbl-wrap">
+                <table className="gy-imptbl">
+                  <thead>
+                    <tr>
+                      <th>文件</th>
+                      <th>时间</th>
+                      <th>账户</th>
+                      <th>导入</th>
+                      <th>更新</th>
+                      <th>跳过</th>
+                      <th>有问题</th>
+                      <th>谁导的</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {history.data.map((h) => (
+                      <tr key={h.id}>
+                        <td>{h.fileName}</td>
+                        <td>{shortTime(h.at)}</td>
+                        <td>{h.account ?? '—'}</td>
+                        <td>{h.imported} 行</td>
+                        <td>{h.updated ?? 0} 行</td>
+                        <td>{h.skipped} 行</td>
+                        <td>{h.errors} 行</td>
+                        <td>{h.by}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           )}
         </>
@@ -431,6 +577,15 @@ export default function ImportPage() {
               <h3>
                 逐行检查<small>行号是表格里的行（第 1 行是表头）</small>
               </h3>
+              {p.counts.unmatched + p.counts.error > 0 && (
+                <input
+                  className="gy-input gy-impfind"
+                  aria-label="搜成片"
+                  placeholder="搜成片：命名、项目或视频编号（手动指认时用）"
+                  value={find}
+                  onChange={(e) => setFind(e.target.value)}
+                />
+              )}
               <div className="gy-row" role="group" aria-label="显示哪些行">
                 <Chip pressed={show === 'all'} count={p.rows.length} onClick={() => setShow('all')}>
                   全部
@@ -453,7 +608,7 @@ export default function ImportPage() {
                       <th>行</th>
                       <th>表格里的名字 / 编号</th>
                       <th>日期</th>
-                      <th>曝光 / 点击</th>
+                      <th>{money ? '消耗 / 成交' : '曝光 / 点击'}</th>
                       <th>对上的成片</th>
                       <th>结果</th>
                     </tr>
@@ -476,6 +631,7 @@ export default function ImportPage() {
                           <td className="nm">
                             <code>{r.name || '—'}</code>
                             {r.code && <small>编号 {r.code}</small>}
+                            {r.materialId && <small>素材 ID {r.materialId}</small>}
                           </td>
                           <td className="nw">
                             {r.dateFrom
@@ -488,7 +644,8 @@ export default function ImportPage() {
                           <td>
                             {r.video && (
                               <span className="gy-impok">
-                                {r.video.projectName} · 第 {r.video.no} 版
+                                {r.video.standardName ??
+                                  `${r.video.projectName} · 第 ${r.video.no} 版`}
                                 <small>{BY[r.by] ?? ''}</small>
                               </span>
                             )}
@@ -507,9 +664,9 @@ export default function ImportPage() {
                                 }}
                               >
                                 <option value="">选一条成片…</option>
-                                {p.videos.map((v) => (
+                                {options.map((v) => (
                                   <option key={v.id} value={v.id}>
-                                    {v.projectName} · 第 {v.no} 版（{v.code}）
+                                    {vLabel(v)}
                                   </option>
                                 ))}
                                 <option value="skip">跳过这一行</option>
@@ -520,7 +677,7 @@ export default function ImportPage() {
                             <span
                               className={`gy-dot ${tone === 'ok' ? 'ok' : tone === 'bad' ? 'bad' : tone === 'warn' ? 'check' : 'none'}`}
                             >
-                              {label}
+                              {r.status === 'OK' && r.update ? '更新这一天' : label}
                             </span>
                             {r.messages.map((m) => (
                               <small key={m} className="gy-imperr">

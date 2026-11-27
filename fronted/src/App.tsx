@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Route, Routes, Navigate, useNavigate } from 'react-router-dom';
+import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Film } from 'lucide-react';
 import { request, post, resetCsrf } from './api';
@@ -29,7 +29,8 @@ import ProjectDetail from './pages/projects/ProjectDetail';
 import VideoList from './pages/library/VideoList';
 import VideoDetail from './pages/library/VideoDetail';
 import ImportPage from './pages/library/ImportPage';
-import { TiredView, WinView } from './pages/library/Insights';
+import DataBoard from './pages/library/DataBoard';
+import Suggestions from './pages/library/Suggestions';
 import Members from './pages/team/Members';
 import MemberNew from './pages/team/MemberNew';
 import Roles from './pages/team/Roles';
@@ -139,7 +140,18 @@ export default function App() {
       </>
     );
   return (
-    <Workspace.Provider value={{ client, username: me.data.username, notify: setToast }}>
+    <Workspace.Provider
+      value={{
+        client,
+        username: me.data.username,
+        notify: setToast,
+        clients: clients.data ?? [],
+        switchClient: (id) => {
+          setActive(id);
+          localStorage.setItem('shangzhen-client', id);
+        },
+      }}
+    >
       <Shell
         client={client}
         clients={clients.data ?? []}
@@ -191,11 +203,22 @@ export default function App() {
           <Route path="/products/new" element={<ProductNew />} />
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/products/:id/review" element={<ProductReview />} />
-          {/* 资产库：项目出好的成片、投放数据、哪种赢了、该换新了 */}
+          {/* 资产库：项目出好的成片；数据组 = 投流看板（素材 / 商品 / 账户 / 哪种赢了）、数据导入、投放建议（含该换新了） */}
           <Route path="/library" element={<VideoList />} />
-          <Route path="/library/import" element={<ImportPage />} />
-          <Route path="/library/win" element={<WinView />} />
-          <Route path="/library/tired" element={<TiredView />} />
+          <Route path="/library/data" element={<Navigate to="/library/data/materials" replace />} />
+          <Route path="/library/data/materials" element={<DataBoard tab="materials" />} />
+          <Route path="/library/data/products" element={<DataBoard tab="products" />} />
+          <Route path="/library/data/accounts" element={<DataBoard tab="accounts" />} />
+          <Route path="/library/data/win" element={<DataBoard tab="win" />} />
+          <Route path="/library/data/import" element={<ImportPage />} />
+          <Route path="/library/data/suggestions" element={<Suggestions />} />
+          {/* 以前的地址：跳到新位置（带上查询参数） */}
+          <Route path="/library/import" element={<Moved to="/library/data/import" />} />
+          <Route path="/library/win" element={<Moved to="/library/data/win" />} />
+          <Route
+            path="/library/tired"
+            element={<Moved to="/library/data/suggestions" extra="tab=tired" />}
+          />
           <Route path="/library/:id" element={<VideoDetail />} />
           <Route path="/assets" element={<Legacy page={<Assets key="assets" />} />} />
           <Route path="/models" element={<Legacy page={<Assets key="models" kind="MODEL" />} />} />
@@ -221,6 +244,12 @@ export default function App() {
       {createDialog}
     </Workspace.Provider>
   );
+}
+/** 旧地址跳到新位置，保留查询参数 */
+function Moved({ to, extra }: { to: string; extra?: string }) {
+  const { search } = useLocation();
+  const q = [search.replace(/^\?/, ''), extra].filter(Boolean).join('&');
+  return <Navigate to={q ? `${to}?${q}` : to} replace />;
 }
 function Login({ onLogin }: { onLogin: () => void }) {
   const [error, setError] = useState('');

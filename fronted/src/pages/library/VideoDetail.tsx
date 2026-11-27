@@ -16,6 +16,8 @@ import {
   type VideoDetail as Detail,
 } from './data';
 import PerfPanel from './PerfPanel';
+import { CampaignBlock, NamingRow } from './CampaignBlock';
+import { CopyName } from './parts';
 
 /** 回到项目的出片步；框架模式带上方向，让对应的那条出片线显示出来 */
 export function projectLink(
@@ -153,6 +155,10 @@ export default function VideoDetail() {
             </dd>
             <dt>视频编号</dt>
             <dd>{v.code}</dd>
+            <dt>命名</dt>
+            <dd>
+              <NamingRow v={v} apply={apply} />
+            </dd>
           </dl>
         </Card>
         <div className="gy-vcol">
@@ -164,11 +170,10 @@ export default function VideoDetail() {
               <Review v={v} busy={busy} onSave={verdict} />
             </Card>
           )}
+          <CampaignBlock jobId={v.id} />
           <PerfPanel v={v} apply={apply} reload={q.refetch} />
           <Card className="gy-pjs">
-            <h3>
-              基于这条再做一条
-            </h3>
+            <h3>基于这条再做一条</h3>
             <div className="gy-rlgrid">
               {RELAY.map(([k, t]) => {
                 const off = relayOff || (k === 'price' && !v.hasPrice ? PRICE_NO : '');
@@ -241,6 +246,18 @@ export default function VideoDetail() {
               <dd>{sceneLabel(v)}</dd>
               <dt>这一版改了什么</dt>
               <dd>{v.note || '—'}</dd>
+              <dt>标准命名</dt>
+              <dd>
+                {v.standardName ? (
+                  <code className="gy-stdname">{v.standardName}</code>
+                ) : (
+                  <span className="gy-unnamed">未规范化</span>
+                )}{' '}
+                <CopyName name={v.standardName} />
+                <small className="gy-fine" style={{ display: 'block' }}>
+                  上传千川时用它命名，导入数据时自动对上。
+                </small>
+              </dd>
               <dt>投放用名</dt>
               <dd>
                 <code className="gy-adnm">{v.adName}</code>{' '}
@@ -248,7 +265,7 @@ export default function VideoDetail() {
                   复制
                 </Btn>
                 <small className="gy-fine" style={{ display: 'block' }}>
-                  投放时用它给素材命名，导入表格时自动对上。
+                  旧的命名方式，导入时也认。
                 </small>
               </dd>
             </dl>

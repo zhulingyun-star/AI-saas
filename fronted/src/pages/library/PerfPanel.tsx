@@ -17,14 +17,20 @@ type Key =
   | 'gpm'
   | 'roi'
   | 'negativeRate'
+  | 'cost'
+  | 'gmv'
+  | 'refundGmv'
+  | 'refundOrders'
+  | 'refundRate1h'
+  | 'coupon'
   | 'note';
 type Draft = Record<Key, string>;
 /** 表单字段：key、名称、类型（date / int / num / auto）、必填 */
 const FORM: [Key | 'ctr' | 'cvr', string, 'date' | 'int' | 'num' | 'auto', boolean?][] = [
   ['dateFrom', '开始日期', 'date', true],
   ['dateTo', '结束日期', 'date'],
-  ['impressions', '曝光', 'int', true],
-  ['clicks', '点击', 'int', true],
+  ['impressions', '曝光', 'int'],
+  ['clicks', '点击', 'int'],
   ['ctr', '点击率（自动算）', 'auto'],
   ['retain3s', '3 秒留存（%）', 'num'],
   ['finishRate', '完播率（%）', 'num'],
@@ -34,6 +40,25 @@ const FORM: [Key | 'ctr' | 'cvr', string, 'date' | 'int' | 'num' | 'auto', boole
   ['gpm', '千次曝光成交额（元）', 'num'],
   ['roi', '投产比', 'num'],
   ['negativeRate', '负反馈率（%）', 'num'],
+  ['cost', '消耗（元）', 'num'],
+  ['gmv', '成交金额（元）', 'num'],
+  ['refundGmv', '退款金额（元）', 'num'],
+  ['refundOrders', '退款订单数', 'int'],
+  ['refundRate1h', '1 小时退款率（%）', 'num'],
+  ['coupon', '智能优惠券（元）', 'num'],
+];
+const MONEY_TILES: [
+  keyof NonNullable<VideoDetail['perf']>,
+  string,
+  (x?: number | null) => string,
+  boolean?,
+][] = [
+  ['cost', '消耗', (x) => (x == null ? '—' : `${x.toFixed(2)} 元`)],
+  ['gmv', '成交金额', (x) => (x == null ? '—' : `${x.toFixed(2)} 元`)],
+  ['netGmv', '净成交金额', (x) => (x == null ? '—' : `${x.toFixed(2)} 元`)],
+  ['netRoi', '净 ROI', (x) => fix(x), true],
+  ['netSettleRate', '净结算率', (x) => pct(x)],
+  ['refundRate1h', '1 小时退款率', (x) => pct(x)],
 ];
 const TILES: [
   keyof NonNullable<VideoDetail['perf']>,
@@ -69,6 +94,12 @@ function draftOf(r?: PerfRecord): Draft {
     gpm: s(r?.gpm),
     roi: s(r?.roi),
     negativeRate: s(r?.negativeRate),
+    cost: s(r?.cost),
+    gmv: s(r?.gmv),
+    refundGmv: s(r?.refundGmv),
+    refundOrders: s(r?.refundOrders),
+    refundRate1h: s(r?.refundRate1h),
+    coupon: s(r?.coupon),
     note: r?.note ?? '',
   };
 }
@@ -129,6 +160,12 @@ export default function PerfPanel({
           gpm: num(d.gpm),
           roi: num(d.roi),
           negativeRate: num(d.negativeRate),
+          cost: num(d.cost),
+          gmv: num(d.gmv),
+          refundGmv: num(d.refundGmv),
+          refundOrders: num(d.refundOrders),
+          refundRate1h: num(d.refundRate1h),
+          coupon: num(d.coupon),
           note: d.note,
           ...(form.id ? { revision: form.revision } : {}),
         };
@@ -167,9 +204,7 @@ export default function PerfPanel({
       <div className="gy-pfhd">
         <span>
           <b>{form.id ? `改 ${dateRange(d.dateFrom, d.dateTo)} 这一条` : '填一条投放数据'}</b>
-          <small>
-            按天填最准；同一条成片的日期不能重叠。
-          </small>
+          <small>按天填最准；同一条成片的日期不能重叠。曝光点击、消耗成交至少填一组。</small>
         </span>
         <span className="gy-row">
           <Btn size="xs" variant="ghost" disabled={busy} onClick={() => setForm(null)}>
@@ -222,6 +257,9 @@ export default function PerfPanel({
 
   const S = v.perf;
   const sig = v.signals;
+  // 只有千川数据（消耗、成交）的成片不显示曝光点击那几列和点击率走势；只有曝光点击的不显示金额列
+  const traffic = rows.some((r) => r.impressions != null);
+  const money = rows.some((r) => r.cost != null || r.gmv != null);
   const tired = sig?.filter((x) => x.hit) ?? [];
   return (
     <Card className="gy-pjs" id="perf">
@@ -250,9 +288,7 @@ export default function PerfPanel({
                   <Plus size={13} aria-hidden="true" />
                   填数据
                 </Btn>
-                <span className="gy-fine">
-                  投放时用下面「来源」里的投放用名命名，导入表格时能自动对上
-                </span>
+                <span className="gy-fine">上传千川时用这条的标准命名，导入时自动对上</span>
               </span>
             </>
           ) : (
@@ -262,7 +298,7 @@ export default function PerfPanel({
       )}
       {S && (
         <>
-          {tired.length > 0 ? (
+          {!traffic ? null : tired.length > 0 ? (
             <div className="gy-tiredbox" role="status">
               <b>该换新了</b>
               <span>按下面三个信号查了一遍，这条碰到了 {tired.length} 个：</span>
@@ -289,33 +325,52 @@ export default function PerfPanel({
           <div className="gy-pfhd">
             <b>累计</b>
             <small>
-              {dateRange(S.from, S.to)} · {S.records} 条记录 · 比例按曝光加权
+              {dateRange(S.from, S.to)} · {S.records} 条记录 ·{' '}
+              {money ? '投产比按消耗加权' : '比例按曝光加权'}
             </small>
           </div>
           <div className="gy-pftiles">
-            {TILES.map(([k, label, f, key]) => (
+            {(S.cost != null || S.gmv != null
+              ? [...MONEY_TILES, ...TILES.filter(([k]) => S[k] != null)]
+              : TILES
+            ).map(([k, label, f, key]) => (
               <div key={k} className={`t${key ? ' k' : ''}`}>
                 <small>{label}</small>
                 <b>{f(S[k] as number | null | undefined)}</b>
               </div>
             ))}
           </div>
-          <div className="gy-pfhd">
-            <b>点击率走势</b>
-            <small>每条记录一个点</small>
-          </div>
-          <Trend rows={[...rows].reverse()} />
+          {traffic && (
+            <>
+              <div className="gy-pfhd">
+                <b>点击率走势</b>
+                <small>每条记录一个点</small>
+              </div>
+              <Trend rows={[...rows].reverse()} />
+            </>
+          )}
           <div className="gy-pftbl">
             <table>
               <thead>
                 <tr>
                   <th>日期</th>
-                  <th>曝光</th>
-                  <th>点击率</th>
-                  <th>3 秒留存</th>
-                  <th>转化率</th>
+                  {traffic && (
+                    <>
+                      <th>曝光</th>
+                      <th>点击率</th>
+                      <th>3 秒留存</th>
+                      <th>转化率</th>
+                    </>
+                  )}
                   <th>投产比</th>
-                  <th>负反馈</th>
+                  {traffic && <th>负反馈</th>}
+                  {money && (
+                    <>
+                      <th>消耗</th>
+                      <th>净成交</th>
+                      <th>1 小时退款率</th>
+                    </>
+                  )}
                   <th>来源 / 备注</th>
                   <th aria-label="操作" />
                 </tr>
@@ -324,16 +379,35 @@ export default function PerfPanel({
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td>{dateRange(r.from, r.to)}</td>
-                    <td>{fmtN(r.impressions)}</td>
-                    <td>{r.impressions ? pct((r.clicks / r.impressions) * 100, 2) : '—'}</td>
-                    <td>{pct(r.retain3s)}</td>
-                    <td>
-                      {r.orders != null && r.clicks ? pct((r.orders / r.clicks) * 100, 2) : '—'}
-                    </td>
-                    <td>{fix(r.roi)}</td>
-                    <td>{pct(r.negativeRate, 2)}</td>
+                    {traffic && (
+                      <>
+                        <td>{fmtN(r.impressions)}</td>
+                        <td>
+                          {r.impressions ? pct(((r.clicks ?? 0) / r.impressions) * 100, 2) : '—'}
+                        </td>
+                        <td>{pct(r.retain3s)}</td>
+                        <td>
+                          {r.orders != null && r.clicks && r.impressions != null
+                            ? pct((r.orders / r.clicks) * 100, 2)
+                            : '—'}
+                        </td>
+                      </>
+                    )}
+                    <td>{fix(r.cost && r.gmv != null ? r.gmv / r.cost : r.roi)}</td>
+                    {traffic && <td>{pct(r.negativeRate, 2)}</td>}
+                    {money && (
+                      <>
+                        <td>{r.cost == null ? '—' : r.cost.toFixed(2)}</td>
+                        <td>{r.netGmv == null ? '—' : r.netGmv.toFixed(2)}</td>
+                        <td>{pct(r.refundRate1h)}</td>
+                      </>
+                    )}
                     <td className="nt">
-                      {r.source === 'IMPORT' ? '表格导入' : '手填'}
+                      {r.source === 'IMPORT'
+                        ? r.materialId
+                          ? `千川导入 · ${r.materialId}`
+                          : '表格导入'
+                        : '手填'}
                       {r.note ? ` · ${r.note}` : ''}
                     </td>
                     <td className="ops">
@@ -382,9 +456,9 @@ export default function PerfPanel({
 
 /** 按记录的点击率折线（只画真实记录，少于 2 条不画） */
 function Trend({ rows }: { rows: PerfRecord[] }) {
-  const pts = rows.filter((r) => r.impressions > 0);
+  const pts = rows.filter((r) => (r.impressions ?? 0) > 0);
   if (pts.length < 2) return <div className="gy-fine">至少要两条有曝光的记录才画得出走势。</div>;
-  const ys = pts.map((r) => (r.clicks / r.impressions) * 100);
+  const ys = pts.map((r) => ((r.clicks ?? 0) / r.impressions!) * 100);
   const mx = Math.max(...ys),
     mn = Math.min(...ys),
     pad = (mx - mn) * 0.25 || 0.3,

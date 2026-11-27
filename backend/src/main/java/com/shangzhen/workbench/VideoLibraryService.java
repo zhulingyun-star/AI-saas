@@ -23,18 +23,26 @@ public class VideoLibraryService {
     /** 「该换新了」的三个信号 */
     static final double CTR_DROP=30,NEGATIVE_MAX=0.8,RETAIN_MIN=25;
     static final String LETTERS="ABC";
-    private final Store s;private final ProjectFlowService flow;private final ProductAnalysisService analysis;
-    public VideoLibraryService(Store s,ProjectFlowService flow,ProductAnalysisService analysis){this.s=s;this.flow=flow;this.analysis=analysis;}
+    private final Store s;private final ProjectFlowService flow;private final ProductAnalysisService analysis;private final NamingService naming;
+    public VideoLibraryService(Store s,ProjectFlowService flow,ProductAnalysisService analysis,NamingService naming){this.s=s;this.flow=flow;this.analysis=analysis;this.naming=naming;}
 
-    /** 一条投放记录；比例字段是百分数，没填就是 null */
-    public record Perf(String id,String jobId,LocalDate from,LocalDate to,long impressions,long clicks,Double retain3s,Double finishRate,Long productClicks,Long orders,
-        Double gpm,Double roi,Double negativeRate,String note,String source,String importId,int revision,String updatedBy,String updatedAt) {}
+    /** 一条投放记录；比例字段是百分数，金额是元，没填就是 null。账户、千川素材 ID 只有从千川表格导入的记录才有。 */
+    public record Perf(String id,String jobId,LocalDate from,LocalDate to,Long impressions,Long clicks,Double retain3s,Double finishRate,Long productClicks,Long orders,
+        Double gpm,Double roi,Double negativeRate,String note,String source,String importId,int revision,String updatedBy,String updatedAt,
+        String accountId,String materialId,String materialName,Double cost,Double gmv,Double refundGmv,Long refundOrders,Double netGmv,Long netOrders,Double refundRate1h,Double coupon) {
+        long imp(){return impressions==null?0:impressions;}
+        long clk(){return clicks==null?0:clicks;}
+        /** 这一条的整体投产比：有消耗和成交金额就按它们算，否则用表里填的投产比 */
+        Double overallRoi(){return cost!=null&&gmv!=null&&cost>0?Double.valueOf(gmv/cost):roi;}
+    }
     private static Double dec(java.math.BigDecimal v){return v==null?null:v.doubleValue();}
     private static Long lng(java.sql.ResultSet r,String c) throws java.sql.SQLException {long v=r.getLong(c);return r.wasNull()?null:v;}
     final org.springframework.jdbc.core.RowMapper<Perf> perfRows=(r,n)->new Perf(r.getString("id"),r.getString("job_id"),r.getDate("date_from").toLocalDate(),r.getDate("date_to").toLocalDate(),
-        r.getLong("impressions"),r.getLong("clicks"),dec(r.getBigDecimal("retain_3s")),dec(r.getBigDecimal("finish_rate")),lng(r,"product_clicks"),lng(r,"orders"),
+        lng(r,"impressions"),lng(r,"clicks"),dec(r.getBigDecimal("retain_3s")),dec(r.getBigDecimal("finish_rate")),lng(r,"product_clicks"),lng(r,"orders"),
         dec(r.getBigDecimal("gpm")),dec(r.getBigDecimal("roi")),dec(r.getBigDecimal("negative_rate")),r.getString("note"),r.getString("source"),r.getString("import_id"),
-        r.getInt("revision"),r.getString("updated_by"),r.getTimestamp("updated_at").toLocalDateTime().toString());
+        r.getInt("revision"),r.getString("updated_by"),r.getTimestamp("updated_at").toLocalDateTime().toString(),
+        r.getString("account_id"),r.getString("material_id"),r.getString("material_name"),dec(r.getBigDecimal("cost")),dec(r.getBigDecimal("gmv")),dec(r.getBigDecimal("refund_gmv")),lng(r,"refund_orders"),
+        dec(r.getBigDecimal("net_gmv")),lng(r,"net_orders"),dec(r.getBigDecimal("refund_rate_1h")),dec(r.getBigDecimal("coupon")));
     List<Perf> records(String client,String job){
         return s.db.query("SELECT * FROM job_performance WHERE client_id=? AND job_id=? ORDER BY date_from,date_to,created_at",perfRows,client,job);
     }
@@ -45,35 +53,73 @@ public class VideoLibraryService {
     }
 
     // ---------- 累计和「该换新了」 ----------
-    private static Double round(Double v,int scale){if(v==null||v.isNaN()||v.isInfinite()) return null;double f=Math.pow(10,scale);return Math.round(v*f)/f;}
-    /** 按曝光加权；曝光都是 0 时没法加权，返回 null */
+    static Double round(Double v,int scale){if(v==null||v.isNaN()||v.isInfinite()) return null;double f=Math.pow(10,scale);return Math.round(v*f)/f;}
+    /** 按曝光加权；曝光都是 0 或没填时没法加权，返回 null */
     private static Double weighted(List<Perf> rows,java.util.function.Function<Perf,Double> f){
         double w=0,sum=0;
-        for(Perf p:rows){Double v=f.apply(p);if(v==null||p.impressions()<=0) continue;w+=p.impressions();sum+=v*p.impressions();}
+        for(Perf p:rows){Double v=f.apply(p);if(v==null||p.imp()<=0) continue;w+=p.imp();sum+=v*p.imp();}
         return w>0?sum/w:null;
     }
-    /** 累计：数量直接加；点击率 = 点击 ÷ 曝光，转化率 = 成交单数 ÷ 点击（只算填了成交单数的记录）；其余比例按曝光加权。 */
+    private static Double sumD(List<Perf> rows,java.util.function.Function<Perf,Double> f){
+        Double out=null;for(Perf p:rows){Double v=f.apply(p);if(v!=null) out=(out==null?0:out)+v;}return out==null?null:round(out,2);
+    }
+    private static Long sumL(List<Perf> rows,java.util.function.Function<Perf,Long> f){
+        Long out=null;for(Perf p:rows){Long v=f.apply(p);if(v!=null) out=(out==null?0:out)+v;}return out;
+    }
+    /** Σa ÷ Σb，只用两项都有的记录；分母是 0 时算不出来 */
+    private static Double quotient(List<Perf> rows,java.util.function.Function<Perf,Double> a,java.util.function.Function<Perf,Double> b){
+        double x=0,y=0;boolean any=false;
+        for(Perf p:rows){Double u=a.apply(p),v=b.apply(p);if(u==null||v==null) continue;x+=u;y+=v;any=true;}
+        return any&&y>0?x/y:null;
+    }
+    /**
+     * 累计：数量和金额直接加；点击率 = 点击 ÷ 曝光，转化率 = 成交单数 ÷ 点击（只算填了成交单数的记录）；
+     * 投产比：有消耗的记录按消耗加权（= 成交金额 ÷ 消耗），一条消耗都没有时按曝光加权；3 秒留存、完播率、千次曝光成交额、负反馈率按曝光加权。
+     * 净成交 ROI = 净成交金额 ÷ 消耗、净结算率 = 净成交金额 ÷ 成交金额（百分数），都只用两项都有的记录；1 小时退款率取记录的平均。
+     */
     static Map<String,Object> summary(List<Perf> rows){
         if(rows==null||rows.isEmpty()) return null;
-        long imp=0,clk=0,ord=0,ordClk=0,pclk=0;boolean hasOrd=false,hasPclk=false;
+        long imp=0,clk=0,ord=0,ordClk=0,pclk=0;boolean hasImp=false,hasOrd=false,hasPclk=false;
         LocalDate from=rows.get(0).from(),to=rows.get(0).to();
         for(Perf p:rows){
-            imp+=p.impressions();clk+=p.clicks();
-            if(p.orders()!=null){hasOrd=true;ord+=p.orders();ordClk+=p.clicks();}
+            if(p.impressions()!=null){hasImp=true;imp+=p.impressions();clk+=p.clk();}
+            if(p.orders()!=null){hasOrd=true;ord+=p.orders();ordClk+=p.clk();}
             if(p.productClicks()!=null){hasPclk=true;pclk+=p.productClicks();}
             if(p.from().isBefore(from)) from=p.from();if(p.to().isAfter(to)) to=p.to();
         }
         Map<String,Object> m=new LinkedHashMap<>();
         m.put("records",rows.size());m.put("from",from.toString());m.put("to",to.toString());
-        m.put("impressions",imp);m.put("clicks",clk);m.put("productClicks",hasPclk?pclk:null);m.put("orders",hasOrd?ord:null);
+        m.put("impressions",hasImp?imp:null);m.put("clicks",hasImp?clk:null);m.put("productClicks",hasPclk?pclk:null);m.put("orders",hasOrd?ord:null);
         m.put("ctr",imp>0?round(clk*100.0/imp,4):null);
         m.put("cvr",hasOrd&&ordClk>0?round(ord*100.0/ordClk,4):null);
         m.put("retain3s",round(weighted(rows,Perf::retain3s),2));m.put("finishRate",round(weighted(rows,Perf::finishRate),2));
-        m.put("gpm",round(weighted(rows,Perf::gpm),2));m.put("roi",round(weighted(rows,Perf::roi),2));m.put("negativeRate",round(weighted(rows,Perf::negativeRate),3));
+        m.put("gpm",round(weighted(rows,Perf::gpm),2));
+        Double byCost=quotient(rows,p->p.overallRoi()==null||p.cost()==null?null:p.overallRoi()*p.cost(),p->p.overallRoi()==null?null:p.cost());
+        m.put("roi",round(byCost!=null?byCost:weighted(rows,Perf::roi),2));
+        m.put("negativeRate",round(weighted(rows,Perf::negativeRate),3));
+        m.put("cost",sumD(rows,Perf::cost));m.put("gmv",sumD(rows,Perf::gmv));m.put("netGmv",sumD(rows,Perf::netGmv));m.put("netOrders",sumL(rows,Perf::netOrders));
+        m.put("netRoi",round(quotient(rows,Perf::netGmv,p->p.netGmv()==null?null:p.cost()),2));
+        Double settle=quotient(rows,p->p.gmv()==null?null:p.netGmv(),p->p.netGmv()==null?null:p.gmv());
+        m.put("netSettleRate",settle==null?null:round(settle*100,2));
+        List<Double> rr=rows.stream().map(Perf::refundRate1h).filter(Objects::nonNull).toList();
+        m.put("refundRate1h",rr.isEmpty()?null:round(rr.stream().mapToDouble(x->x).average().orElse(0),2));
         return m;
     }
+    /** 同一天（同一段日期）有好几条记录（不同千川账户 / 素材）时合成一个点：曝光、点击相加，比例按曝光加权 */
+    static List<Perf> byDay(List<Perf> rows){
+        Map<String,List<Perf>> g=new LinkedHashMap<>();
+        for(Perf p:rows) g.computeIfAbsent(p.from()+"|"+p.to(),k->new ArrayList<>()).add(p);
+        List<Perf> out=new ArrayList<>();
+        for(List<Perf> l:g.values()){
+            if(l.size()==1){out.add(l.get(0));continue;}
+            Perf a=l.get(0);
+            out.add(new Perf(a.id(),a.jobId(),a.from(),a.to(),sumL(l,Perf::impressions),sumL(l,Perf::clicks),weighted(l,Perf::retain3s),weighted(l,Perf::finishRate),sumL(l,Perf::productClicks),sumL(l,Perf::orders),
+                weighted(l,Perf::gpm),weighted(l,Perf::roi),weighted(l,Perf::negativeRate),"",a.source(),null,0,"","",null,null,null,null,null,null,null,null,null,null,null));
+        }
+        return out;
+    }
     private static double avg(List<Perf> rows,java.util.function.Function<Perf,Double> f){return rows.stream().mapToDouble(x->f.apply(x)).average().orElse(0);}
-    private static double ctr(Perf p){return p.clicks()*100.0/p.impressions();}
+    private static double ctr(Perf p){return p.clk()*100.0/p.imp();}
     private static String f1(double v){return String.format(Locale.ROOT,"%.1f",v);}
     /**
      * 该换新了：按日期排好的记录里，只看曝光大于 0 的，至少 3 条才判断，少于 3 条返回 null（还判断不了）。
@@ -83,7 +129,7 @@ public class VideoLibraryService {
      * 每条记录算一个点（按天填最准）。
      */
     static List<Map<String,Object>> signals(List<Perf> sorted){
-        List<Perf> rows=sorted==null?List.of():sorted.stream().filter(p->p.impressions()>0).sorted(Comparator.comparing(Perf::from).thenComparing(Perf::to)).toList();
+        List<Perf> rows=sorted==null?List.of():byDay(sorted).stream().filter(p->p.imp()>0).sorted(Comparator.comparing(Perf::from).thenComparing(Perf::to)).toList();
         if(rows.size()<3) return null;
         List<Map<String,Object>> out=new ArrayList<>();
         List<Perf> last7=rows.subList(Math.max(0,rows.size()-7),rows.size()),last3=rows.subList(rows.size()-3,rows.size());
@@ -112,11 +158,11 @@ public class VideoLibraryService {
     private final class Ctx {
         final String client;final Map<String,Project> projects=new HashMap<>();final Map<String,Asset> assets;final Map<String,Map<String,Object>> verdicts;
         final Map<String,Dir> dirs=new HashMap<>();final Map<String,String> letters=new HashMap<>();final Map<String,String[]> refProfiles=new HashMap<>();
-        final Map<String,List<Perf>> perf;final Map<String,Boolean> prices=new HashMap<>();final Map<String,Integer> numbers=new HashMap<>();
+        final Map<String,List<Perf>> perf;final Map<String,Boolean> prices=new HashMap<>();final Map<String,Integer> numbers=new HashMap<>();final Map<String,NamingService.Naming> names;
         Ctx(String client,List<JobSnap> jobs){
             this.client=client;
             for(Project p:s.db.query("SELECT * FROM projects WHERE client_id=?",s.projects,client)) projects.put(p.id(),p);
-            assets=flow.assets(client);verdicts=flow.verdicts(client);perf=allRecords(client);
+            assets=flow.assets(client);verdicts=flow.verdicts(client);perf=allRecords(client);names=naming.all(client);
             s.db.query("SELECT id,project_id,data_json,selected,select_order FROM project_directions WHERE client_id=?",rs->{
                 dirs.put(rs.getString(1),new Dir(rs.getString(1),rs.getString(2),s.read(rs.getString(3),new TypeReference<DirectionFlowService.Direction>(){}),rs.getBoolean(4),rs.getInt(5)));
             },client);
@@ -198,12 +244,15 @@ public class VideoLibraryService {
         String anchor=product==null?"":str(product.get("anchorId"));
         v.put("hasPrice",!anchor.isEmpty()&&c.hasPrice(anchor));
         v.put("adName",adName(product==null?"":str(product.get("name")),hook,persona,scene,snap.duration(),no,code(j.id())));
+        NamingService.Naming nm=c.names.get(j.id());
+        v.put("standardName",nm==null?null:nm.standardName());v.put("naming",NamingService.view(nm));
         List<Perf> rows=c.perf.getOrDefault(j.id(),List.of());
         v.put("perf",summary(rows));v.put("tired",tired(rows));
         return v;
     }
     /** 资产库列表：只列出好了的版本（有成片文件），新的在前；没出好的版本只给个数 */
     public Map<String,Object> library(String client){
+        naming.ensure(client);
         List<JobSnap> jobs=jobs(client,null);Ctx c=new Ctx(client,jobs);
         List<Map<String,Object>> videos=new ArrayList<>();int pending=0;
         for(JobSnap j:jobs.stream().sorted(Comparator.comparing(JobSnap::created).thenComparing(JobSnap::id).reversed()).toList()){
@@ -216,6 +265,7 @@ public class VideoLibraryService {
     }
     /** 一条成片的详情：来源、出片词、审片、投放记录、累计和「该换新了」的每个信号 */
     public Map<String,Object> detail(String client,String jobId){
+        naming.ensure(client);
         List<JobSnap> one=jobs(client,jobId);
         if(one.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"这条成片不存在");
         JobSnap j=one.get(0);

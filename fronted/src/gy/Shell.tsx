@@ -78,15 +78,24 @@ export const SECTIONS: Section[] = [
       '/voices',
     ],
     groups: [
-      [
-        '成片',
-        [
-          { to: '/library', label: '全部成片', icon: Film },
-        ],
-      ],
+      ['成片', [{ to: '/library', label: '全部成片', icon: Film }]],
       [
         '数据',
-        [{ to: '/library/import', label: '投放数据', icon: ChartNoAxesCombined }],
+        [
+          {
+            to: '/library/data/materials',
+            label: '投流看板',
+            icon: ChartNoAxesCombined,
+            also: ['/library/data'],
+          },
+          {
+            to: '/library/data/import',
+            label: '数据导入',
+            icon: ChartNoAxesCombined,
+            also: ['/library/import'],
+          },
+          { to: '/library/data/suggestions', label: '投放建议', icon: ChartNoAxesCombined },
+        ],
       ],
       [
         '生产资料',

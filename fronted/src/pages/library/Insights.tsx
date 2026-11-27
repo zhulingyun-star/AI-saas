@@ -16,7 +16,7 @@ import { VideoCard } from './parts';
 const TIRED_RULE = '点击率掉了 30% 以上、负反馈超过 0.8%、有效播放低于 25%（用 3 秒留存看）';
 
 /** 哪种赢了：把填了投放数据的成片按一个维度分组，比平均点击率、转化率、投产比。只用真实填的数据。 */
-export function WinView() {
+export function WinView({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const { videos, isPending } = useVideoLibrary();
@@ -40,11 +40,12 @@ export function WinView() {
   };
   const tired = withData.filter((v) => v.tired.length);
   return (
-    <div className="gy-page gy-new">
-      <PageHead
-        title="哪种赢了"
-        description="按一个维度分组，比平均点击率、转化率、投产比。"
-      />
+    <div className={embedded ? 'gy-stack' : 'gy-page gy-new'}>
+      {embedded ? (
+        <span className="gy-fine">按一个维度分组，比平均点击率、转化率、投产比。</span>
+      ) : (
+        <PageHead title="哪种赢了" description="按一个维度分组，比平均点击率、转化率、投产比。" />
+      )}
       {isPending ? (
         <span className="gy-muted">正在加载…</span>
       ) : !withData.length ? (
@@ -53,7 +54,7 @@ export function WinView() {
             <Btn variant="primary" onClick={() => navigate('/library')}>
               去给成片填数据
             </Btn>
-            <Btn onClick={() => navigate('/library/import')}>导入投放表格</Btn>
+            <Btn onClick={() => navigate('/library/data/import')}>导入投放表格</Btn>
           </span>
         </EmptyState>
       ) : (
@@ -149,19 +150,20 @@ function TiredCard({ list }: { list: ReturnType<typeof useVideoLibrary>['videos'
 }
 
 /** 该换新了：只看填了投放数据、并且碰到了信号的成片 */
-export function TiredView() {
+export function TiredView({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const { videos, isPending } = useVideoLibrary();
   const withData = videos.filter((v) => v.perf);
   const tired = withData.filter((v) => v.tired.length);
   return (
-    <div className="gy-page gy-new">
-      <PageHead
-        title="该换新了"
-        description={`判断依据：${TIRED_RULE}。至少 3 条有曝光的记录。`}
-      >
-        <Btn onClick={() => navigate('/library/import')}>导入投放表格</Btn>
-      </PageHead>
+    <div className={embedded ? 'gy-stack' : 'gy-page gy-new'}>
+      {embedded ? (
+        <span className="gy-fine">判断依据：{TIRED_RULE}。至少 3 条有曝光的记录。</span>
+      ) : (
+        <PageHead title="该换新了" description={`判断依据：${TIRED_RULE}。至少 3 条有曝光的记录。`}>
+          <Btn onClick={() => navigate('/library/data/import')}>导入投放表格</Btn>
+        </PageHead>
+      )}
       {isPending ? (
         <span className="gy-muted">正在加载…</span>
       ) : !withData.length ? (
@@ -172,9 +174,7 @@ export function TiredView() {
         </EmptyState>
       ) : !tired.length ? (
         <EmptyState title="目前没有该换新的成片">
-          <span>
-            {withData.length} 条有数据的成片都没碰到这三个信号。
-          </span>
+          <span>{withData.length} 条有数据的成片都没碰到这三个信号。</span>
         </EmptyState>
       ) : (
         <>
@@ -188,8 +188,7 @@ export function TiredView() {
             ))}
           </div>
           <p className="gy-muted">
-            {tired.length} 条该换新了 · 共 {withData.length}{' '}
-            条成片填了投放数据。
+            {tired.length} 条该换新了 · 共 {withData.length} 条成片填了投放数据。
           </p>
         </>
       )}

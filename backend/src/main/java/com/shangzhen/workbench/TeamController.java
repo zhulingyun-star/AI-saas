@@ -41,13 +41,15 @@ public class TeamController {
 
 /**
  * 按角色拦客户空间里的修改操作（查看不拦）。管理员、客户负责人不受限制；
- * 只读：什么都不能改；内容制作：不能审片、不能填或导入投放数据、不能改客户知识；投手：不能改客户知识。
+ * 只读：什么都不能改；内容制作：不能审片、不能填或导入投放数据、不能管理千川账户和处理投放建议（/analytics 下的修改）、不能改客户知识；投手：不能改客户知识。
+ * 也就是说：导入、账户管理、处理建议 = 管理员 / 客户负责人 / 投手；看板（GET）所有角色都能看。
  * 能不能进这个客户由各接口里的 Store.access 判断，这里只管角色。
  */
 @Component
 class RoleGuard implements HandlerInterceptor {
     private static final Pattern REVIEW=Pattern.compile("^jobs/[^/]+/(verdict|reviews)$");
     private static final Pattern PERFORMANCE=Pattern.compile("^(jobs/[^/]+/performance(/.*)?|performance-imports(/.*)?|metrics/import)$");
+    private static final Pattern ANALYTICS=Pattern.compile("^analytics(/.*)?$");
     private static final Pattern KNOWLEDGE=Pattern.compile("^presets(/.*)?$");
     private final TeamService team;
     RoleGuard(TeamService team){this.team=team;}
@@ -70,6 +72,7 @@ class RoleGuard implements HandlerInterceptor {
             case "VIEWER"->"只读账号只能查看，不能修改";
             case "MAKER"->REVIEW.matcher(rest).matches()?"内容制作不能审片，请让投手或客户负责人来审"
                 :PERFORMANCE.matcher(rest).matches()?"内容制作只能查看投放数据，不能填写或导入"
+                :ANALYTICS.matcher(rest).matches()?"内容制作只能看投流看板，不能导入、管理千川账户或处理投放建议"
                 :KNOWLEDGE.matcher(rest).matches()?"客户知识只有管理员和客户负责人能改":null;
             case "BUYER"->KNOWLEDGE.matcher(rest).matches()?"客户知识只有管理员和客户负责人能改":null;
             default->null;

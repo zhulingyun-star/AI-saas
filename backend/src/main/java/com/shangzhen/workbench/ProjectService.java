@@ -48,7 +48,7 @@ public class ProjectService {
         Project project=create(client,user,input);
         s.db.queryForObject("SELECT id FROM clients WHERE id=? FOR UPDATE",String.class,client);
         String id=Store.id();var now=Store.now();
-        s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at) VALUES(?,?,?,?,?,'QUEUED',0,?,?,NULL,1,?,?)",id,client,project.id(),project.name(),"VIDEO_API",s.write(project),"已确认费用，等待自动生成框架与分镜",now,now);
+        s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at,created_by) VALUES(?,?,?,?,?,'QUEUED',0,?,?,NULL,1,?,?,?)",id,client,project.id(),project.name(),"VIDEO_API",s.write(project),"已确认费用，等待自动生成框架与分镜",now,now,user);
         s.audit(client,user,"提交一键成片",project.name()+" / AI方案 + 视频生成");
         return Map.of("project",project,"job",s.job(client,id));
     }
@@ -98,7 +98,7 @@ public class ProjectService {
             boolean external=input.provider().equals("VIDEO_API");
             String status=external&&!video.enabled()?"BLOCKED":"QUEUED";
             String message=status.equals("BLOCKED")?"视频供应商未配置；未发出请求、未产生费用":external?"已排队：提交后将调用 "+video.model()+"，可能产生供应商费用":"已排队：将使用上传素材进行 FFmpeg 粗剪";
-            s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",jobId,client,id,p.name(),input.provider(),status,0,s.write(p),message,null,version,now,now);
+            s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",jobId,client,id,p.name(),input.provider(),status,0,s.write(p),message,null,version,now,now,user);
             jobs.add(s.job(client,jobId));
         }
         s.audit(client,user,"提交制作",jobs.size()+" 条产单 / "+input.provider()); return jobs;

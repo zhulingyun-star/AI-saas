@@ -6,23 +6,34 @@ import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
 import java.util.*;
 
-/** 资产库（成片）和投放数据：列表、详情、手填 / 改 / 删投放记录、CSV 表格导入。说明见 backend/API.md「资产库与投放数据」。 */
+/** 资产库（成片）和投放数据：列表、详情、成片命名、手填 / 改 / 删投放记录、CSV 表格导入、单条成片的投放表现。说明见 backend/API.md「资产库与投放数据」「投流数据回流（V14）」。 */
 @RestController
 @RequestMapping("/api/clients/{client}")
 public class VideoLibraryController {
-    private final Store s;private final VideoLibraryService library;private final PerformanceService perf;
-    public VideoLibraryController(Store s,VideoLibraryService library,PerformanceService perf){this.s=s;this.library=library;this.perf=perf;}
+    private final Store s;private final VideoLibraryService library;private final PerformanceService perf;private final NamingService naming;private final AnalyticsService analytics;
+    public VideoLibraryController(Store s,VideoLibraryService library,PerformanceService perf,NamingService naming,AnalyticsService analytics){this.s=s;this.library=library;this.perf=perf;this.naming=naming;this.analytics=analytics;}
     public record PerfInput(@NotBlank @Size(max=10) String dateFrom,@Size(max=10) String dateTo,Long impressions,Long clicks,Double retain3s,Double finishRate,
-        Long productClicks,Long orders,Double gpm,Double roi,Double negativeRate,@Size(max=300) String note,@Min(0) Integer revision) {
-        PerformanceService.Values values(){return new PerformanceService.Values(dateFrom,dateTo,impressions,clicks,retain3s,finishRate,productClicks,orders,gpm,roi,negativeRate,note);}
+        Long productClicks,Long orders,Double gpm,Double roi,Double negativeRate,@Size(max=300) String note,@Min(0) Integer revision,
+        Double cost,Double gmv,Double refundGmv,Long refundOrders,Double refundRate1h,Double coupon) {
+        PerformanceService.Values values(){return new PerformanceService.Values(dateFrom,dateTo,impressions,clicks,retain3s,finishRate,productClicks,orders,gpm,roi,negativeRate,note,cost,gmv,refundGmv,refundOrders,refundRate1h,coupon);}
     }
     public record ImportBody(@Size(max=200) String fileName,@NotNull @Size(max=PerformanceService.MAX_TEXT) String text,@Size(max=20) Map<@Size(max=20) String,Integer> mapping,
-        @Size(max=PerformanceService.MAX_ROWS) Map<@Size(max=10) String,@Size(max=36) String> assign,boolean confirmed) {
-        PerformanceService.ImportInput input(){return new PerformanceService.ImportInput(fileName,text,mapping,assign);}
+        @Size(max=PerformanceService.MAX_ROWS) Map<@Size(max=10) String,@Size(max=36) String> assign,boolean confirmed,
+        @Size(max=36) String accountId,@Size(max=10) String rangeFrom,@Size(max=10) String rangeTo) {
+        PerformanceService.ImportInput input(){return new PerformanceService.ImportInput(fileName,text,mapping,assign,accountId,rangeFrom,rangeTo);}
     }
+    public record NamingInput(@Size(max=20) String productShort,@Size(max=10) String form,Integer version,@Min(0) int revision) {}
 
     @GetMapping("/video-library") Map<String,Object> list(Principal u,@PathVariable String client){s.access(client,u.getName());return library.library(client);}
     @GetMapping("/video-library/{job}") Map<String,Object> detail(Principal u,@PathVariable String client,@PathVariable String job){s.access(client,u.getName());return library.detail(client,job);}
+    @PutMapping("/jobs/{job}/naming") Map<String,Object> naming(Principal u,@PathVariable String client,@PathVariable String job,@Valid @RequestBody NamingInput b){
+        s.access(client,u.getName());
+        naming.update(client,u.getName(),job,b.productShort(),b.form(),b.version(),b.revision());
+        return library.detail(client,job);
+    }
+    @GetMapping("/jobs/{job}/campaign-stats") Map<String,Object> campaignStats(Principal u,@PathVariable String client,@PathVariable String job){
+        s.access(client,u.getName());return analytics.jobStats(client,job);
+    }
     @PostMapping("/jobs/{job}/performance") Map<String,Object> create(Principal u,@PathVariable String client,@PathVariable String job,@Valid @RequestBody PerfInput b){
         s.access(client,u.getName());return perf.create(client,u.getName(),job,b.values());
     }

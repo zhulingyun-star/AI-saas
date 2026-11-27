@@ -18,8 +18,8 @@ export interface PerfSummary {
   records: number;
   from: string;
   to: string;
-  impressions: number;
-  clicks: number;
+  impressions?: number | null;
+  clicks?: number | null;
   productClicks?: number | null;
   orders?: number | null;
   ctr?: number | null;
@@ -29,6 +29,25 @@ export interface PerfSummary {
   gpm?: number | null;
   roi?: number | null;
   negativeRate?: number | null;
+  /** 千川数据（元 / 百分数）；没导入过就没有 */
+  cost?: number | null;
+  gmv?: number | null;
+  netGmv?: number | null;
+  netOrders?: number | null;
+  netRoi?: number | null;
+  netSettleRate?: number | null;
+  refundRate1h?: number | null;
+}
+/** 成片的标准命名：YYMMDD-商品简称-内容形式-创作者-V版本；补不出来时 standardName 为空，problem 写原因 */
+export interface Naming {
+  standardName?: string | null;
+  date: string;
+  productShort?: string | null;
+  form: string;
+  creator?: string | null;
+  version?: number | null;
+  problem: string;
+  revision: number;
 }
 export interface VideoItem {
   id: string;
@@ -59,6 +78,8 @@ export interface VideoItem {
   verdict?: Verdict | null;
   hasPrice: boolean;
   adName: string;
+  standardName?: string | null;
+  naming?: Naming | null;
   perf?: PerfSummary | null;
   tired: string[];
 }
@@ -67,8 +88,8 @@ export interface PerfRecord {
   jobId: string;
   from: string;
   to: string;
-  impressions: number;
-  clicks: number;
+  impressions?: number | null;
+  clicks?: number | null;
   retain3s?: number | null;
   finishRate?: number | null;
   productClicks?: number | null;
@@ -77,6 +98,17 @@ export interface PerfRecord {
   roi?: number | null;
   negativeRate?: number | null;
   note: string;
+  cost?: number | null;
+  gmv?: number | null;
+  refundGmv?: number | null;
+  refundOrders?: number | null;
+  netGmv?: number | null;
+  netOrders?: number | null;
+  refundRate1h?: number | null;
+  coupon?: number | null;
+  accountId?: string | null;
+  materialId?: string | null;
+  materialName?: string | null;
   source: 'MANUAL' | 'IMPORT';
   revision: number;
   updatedBy: string;

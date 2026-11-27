@@ -540,7 +540,7 @@ public class DirectionFlowService {
         int no=s.db.queryForObject("SELECT COALESCE(MAX(revision),0)+1 FROM jobs WHERE project_id=?",Integer.class,id);
         String status=video.enabled()?"QUEUED":"BLOCKED";
         String message=video.enabled()?"已排队：提交后将调用 "+video.model():"视频供应商未配置；未发出请求";
-        s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",jobId,client,id,p.name(),"VIDEO_API",status,0,s.write(snap),message,null,no,now,now);
+        s.db.update("INSERT INTO jobs(id,client_id,project_id,name,provider,status,progress,snapshot,message,output_name,revision,created_at,updated_at,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",jobId,client,id,p.name(),"VIDEO_API",status,0,s.write(snap),message,null,no,now,now,user);
         s.db.update("UPDATE work_flow SET phase='PRODUCTION',revision=revision+1,updated_at=? WHERE project_id=? AND phase='PLAN'",now,id);
         s.audit(client,user,"出片",p.name()+" / "+r.data().title()+" / "+note);
         return numbered(flow.versions(client,id),mode(p)).stream().filter(v->v.get("id").equals(jobId)).findFirst().orElseThrow();

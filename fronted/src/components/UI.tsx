@@ -7,6 +7,9 @@ export const Workspace = createContext<{
   client: Client;
   username: string;
   notify: (text: string) => void;
+  /** 能进的客户空间和切换（不跳页）；投流看板的「客户空间」筛选用 */
+  clients?: Client[];
+  switchClient?: (id: string) => void;
 }>(null!);
 export const useWorkspace = () => useContext(Workspace);
 export function useData<T>(resource: string, refresh = false) {
